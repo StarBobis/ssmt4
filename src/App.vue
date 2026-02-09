@@ -1,160 +1,130 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
-
-const greetMsg = ref("");
-const name = ref("");
-
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsg.value = await invoke("greet", { name: name.value });
-}
+// import { ref } from "vue";
+// import { invoke } from "@tauri-apps/api/core";
 </script>
 
 <template>
-  <main class="container">
-    <h1>Welcome to Tauri + Vue</h1>
+  <el-config-provider>
+    <el-container class="app-container">
+      <el-aside width="250px" class="app-aside">
+        <div class="aside-flex">
+          <div class="app-logo">
+            <h2>SSMT4 Tools</h2>
+          </div>
+          
+          <el-menu
+            :default-active="$route.path"
+            class="menu-top"
+            router
+          >
+            <el-menu-item index="/">
+              <el-icon><HomeFilled /></el-icon>
+              <span>主页</span>
+            </el-menu-item>
+            <el-menu-item index="/workbench">
+              <el-icon><Monitor /></el-icon>
+              <span>工作台</span>
+            </el-menu-item>
+            <el-menu-item index="/stickers">
+              <el-icon><Picture /></el-icon>
+              <span>贴图标记</span>
+            </el-menu-item>
+            <el-menu-item index="/websites">
+              <el-icon><Link /></el-icon>
+              <span>常用网址</span>
+            </el-menu-item>
+          </el-menu>
 
-    <div class="row">
-      <a href="https://vite.dev" target="_blank">
-        <img src="/vite.svg" class="logo vite" alt="Vite logo" />
-      </a>
-      <a href="https://tauri.app" target="_blank">
-        <img src="/tauri.svg" class="logo tauri" alt="Tauri logo" />
-      </a>
-      <a href="https://vuejs.org/" target="_blank">
-        <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-      </a>
-    </div>
-    <p>Click on the Tauri, Vite, and Vue logos to learn more.</p>
-
-    <form class="row" @submit.prevent="greet">
-      <input id="greet-input" v-model="name" placeholder="Enter a name..." />
-      <button type="submit">Greet</button>
-    </form>
-    <p>{{ greetMsg }}</p>
-  </main>
+          <el-menu
+            :default-active="$route.path"
+            class="menu-bottom"
+            router
+          >
+            <el-menu-item index="/settings">
+              <el-icon><Setting /></el-icon>
+              <span>设置</span>
+            </el-menu-item>
+          </el-menu>
+        </div>
+      </el-aside>
+      
+      <el-main class="app-main">
+        <router-view v-slot="{ Component }">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </el-main>
+    </el-container>
+  </el-config-provider>
 </template>
 
-<style scoped>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #249b73);
-}
-
-</style>
 <style>
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
+/* Global Resets */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+#app {
+  height: 100%;
+}
+</style>
 
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
+<style scoped>
+.app-container {
+  height: 100vh;
+  overflow: hidden;
 }
 
-.container {
-  margin: 0;
-  padding-top: 10vh;
+.app-aside {
+  background-color: var(--el-bg-color);
+  border-right: 1px solid var(--el-border-color-light);
+}
+
+.aside-flex {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  height: 100%;
+}
+
+.app-logo {
+  padding: 20px;
   text-align: center;
+  border-bottom: 1px solid var(--el-border-color-light);
+}
+.app-logo h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--el-text-color-primary);
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
+.menu-top {
+  flex-grow: 1;
+  border-right: none !important;
+  overflow-y: auto;
 }
 
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
+.menu-bottom {
+  flex-grow: 0;
+  border-right: none !important;
+  border-top: 1px solid var(--el-border-color-light);
 }
 
-.row {
-  display: flex;
-  justify-content: center;
+.app-main {
+  padding: 20px;
+  background-color: var(--el-fill-color-light);
+  overflow-y: auto;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
 }
 
-a:hover {
-  color: #535bf2;
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
-}
-
 </style>
