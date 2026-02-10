@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { appSettings } from "./store";
+import TitleBar from "./components/TitleBar.vue";
 
 const isCollapse = ref(false);
 
@@ -17,6 +18,10 @@ const bgStyle = computed(() => {
 </script>
 
 <template>
+  <!-- Custom Title Bar -->
+  <TitleBar>
+  </TitleBar>
+
   <!-- Background Layer -->
   <div class="bg-layer" :style="bgStyle">
     <video 
@@ -168,17 +173,23 @@ html, body {
   background-color: rgba(255, 255, 255, 0.2) !important;
 }
 
-/* Active State: Darker/Colored background to ensure white text is visible */
+/* Active State: Glassmorphism style */
 :deep(.el-menu-item.is-active) {
-  background-color: var(--el-color-primary) !important; /* Solid primary color */
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2); /* Lift effect */
-  text-shadow: none; /* Shadow not needed on dark bg */
+  background-color: rgba(255, 255, 255, 0.25) !important;
+  border-right: 3px solid #ffffff; /* Use a border to mark active */
+  font-weight: 600;
+  /* Keep text shadow for readability */
 }
 
 .menu-top {
   flex-grow: 1;
   border-right: none !important;
   overflow-y: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+.menu-top::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
 }
 
 .menu-bottom {
@@ -188,7 +199,7 @@ html, body {
 }
 
 .app-main {
-  padding: 20px;
+  padding: 52px 20px 20px 20px;
   /* Content area: Configurable */
   background-color: rgba(255, 255, 255, var(--content-bg-opacity, 0.55)); 
   backdrop-filter: blur(var(--content-blur, 3px)); 

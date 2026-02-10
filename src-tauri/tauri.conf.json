@@ -12,10 +12,11 @@
   "app": {
     "windows": [
       {
-        "center": true, 
+        "center": true,
         "title": "SSMT4 V0.0.1",
         "width": 1000,
-        "height": 600
+        "height": 600,
+        "decorations": false
       }
     ],
     "security": {
