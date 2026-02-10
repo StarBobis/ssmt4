@@ -1,3 +1,4 @@
 pub mod common;
 pub mod settings;
 pub mod process;
+pub mod game_scanner;

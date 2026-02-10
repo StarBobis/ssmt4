@@ -1,6 +1,7 @@
 import { reactive, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { message } from '@tauri-apps/plugin-dialog'
+import { convertFileSrc } from '@tauri-apps/api/core'
 
 // Define the shape of our settings
 export interface AppSettings {
@@ -12,6 +13,13 @@ export interface AppSettings {
   contentOpacity: number;
   contentBlur: number;
   cacheDir: string;
+  currentConfigName: string;
+}
+
+export interface GameInfo {
+  name: string;
+  iconPath: string;
+  bgPath: string;
 }
 
 const defaultSettings: AppSettings = {
@@ -22,12 +30,12 @@ const defaultSettings: AppSettings = {
   sidebarBlur: 20,
   contentOpacity: 0.2, // Lower default for dark theme transparency
   contentBlur: 3,
-  cacheDir: ''
+  cacheDir: '',
+  currentConfigName: 'Default'
 }
 
 export const appSettings = reactive<AppSettings>({ ...defaultSettings })
-
-// Load from backend - replaced below
+export const gamesList = reactive<GameInfo[]>([])
 
 
 // Initial load
@@ -53,8 +61,35 @@ async function loadSettings() {
   }
 }
 
+
+export async function loadGames() {
+    try {
+        const games = await invoke<GameInfo[]>('scan_games');
+        console.log('Scanned games:', games);
+        
+        // Transform paths for frontend usage
+        const processed = games.map(g => ({
+            name: g.name,
+            iconPath: convertFileSrc(g.iconPath),
+            bgPath: convertFileSrc(g.bgPath)
+        }));
+        
+        gamesList.splice(0, gamesList.length, ...processed);
+    } catch (e) {
+        console.error('Failed to scan games:', e);
+    }
+}
+
+export function switchToGame(game: GameInfo) {
+    appSettings.currentConfigName = game.name;
+    // Assume image background for games
+    appSettings.bgType = 'image';
+    appSettings.bgImage = game.bgPath;
+}
+
 // Initial load
-loadSettings()
+loadSettings();
+loadGames();
 
 // Auto-save behavior
 watch(appSettings, async (newVal) => {
