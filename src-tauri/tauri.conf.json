@@ -21,7 +21,16 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APP/**",
+          "$RESOURCE/**",
+          "src-tauri/resources/**",
+          "target/**"
+        ]
+      }
     } 
   },
   "bundle": {

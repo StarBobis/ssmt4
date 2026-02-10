@@ -1,7 +1,10 @@
-import { reactive, watch } from 'vue'
+import { reactive, watch, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { message } from '@tauri-apps/plugin-dialog'
 import { convertFileSrc } from '@tauri-apps/api/core'
+
+// Global UI State
+export const isDrawerOpen = ref(false);
 
 // Define the shape of our settings
 export interface AppSettings {
@@ -20,6 +23,10 @@ export interface GameInfo {
   name: string;
   iconPath: string;
   bgPath: string;
+  bgVideoPath?: string;
+  rawIcon?: string;
+  rawBg?: string;
+  rawBgVideo?: string;
 }
 
 const defaultSettings: AppSettings = {
@@ -68,11 +75,26 @@ export async function loadGames() {
         console.log('Scanned games:', games);
         
         // Transform paths for frontend usage
-        const processed = games.map(g => ({
-            name: g.name,
-            iconPath: convertFileSrc(g.iconPath),
-            bgPath: convertFileSrc(g.bgPath)
-        }));
+    const processed = games.map(g => {
+      const rawIcon = (g as any).icon_path || (g as any).iconPath || '';
+      const rawBg = (g as any).bg_path || (g as any).bgPath || '';
+      const rawBgVideo = (g as any).bgVideoPath || (g as any).bg_video_path || '';
+      
+      const icon = rawIcon ? convertFileSrc(rawIcon) : '';
+      const bg = rawBg ? convertFileSrc(rawBg) : '';
+      const bgVideo = rawBgVideo ? convertFileSrc(rawBgVideo) : '';
+      
+      console.log('[store] game paths', g.name, { rawIcon, icon, rawBg, bg, rawBgVideo });
+      return {
+        name: g.name,
+        iconPath: icon,
+        bgPath: bg,
+        bgVideoPath: bgVideo,
+        rawIcon: rawIcon,
+        rawBg: rawBg,
+        rawBgVideo: rawBgVideo,
+      } as GameInfo;
+    });
         
         gamesList.splice(0, gamesList.length, ...processed);
     } catch (e) {
@@ -82,9 +104,29 @@ export async function loadGames() {
 
 export function switchToGame(game: GameInfo) {
     appSettings.currentConfigName = game.name;
-    // Assume image background for games
-    appSettings.bgType = 'image';
-    appSettings.bgImage = game.bgPath;
+
+    // Check if we should stay in video mode
+    if (appSettings.bgType === 'video') {
+        // Only switch if the game has a valid video background
+        if (game.rawBgVideo) {
+            appSettings.bgVideo = convertFileSrc(game.rawBgVideo);
+            // Explicitly stay in video mode (though already is)
+            appSettings.bgType = 'video';
+        } else {
+             // Do nothing means keep previous video.
+             // "Don't switch to corresponding background image unless..."
+             console.log(`[Store] Keeping previous video for ${game.name} because it has no video bg.`);
+        }
+    } else {
+        // Not in video mode, use standard behavior (switch to image)
+        appSettings.bgType = 'image';
+        // Prefer storing raw filesystem path in settings (avoid saving converted asset URL)
+        // If rawBg is available use it; otherwise fall back to bgPath
+        // @ts-ignore
+        const rawBg = (game as any).rawBg || '';
+        // convert raw fs path to asset url if present, otherwise reuse pre-converted bgPath
+        appSettings.bgImage = rawBg ? convertFileSrc(rawBg) : (game.bgPath || '');
+    }
 }
 
 // Initial load
