@@ -45,7 +45,7 @@ const handleGameSelect = (game: any) => {
     top: 0;
     left: 0;
     width: 100%;
-    min-height: 100%;
+    height: 100%; /* Constrain height to viewport to enable internal scrolling */
     box-sizing: border-box;
     padding-top: 60px; /* TitleBar Safe Area */
     padding-bottom: 40px;
@@ -55,6 +55,21 @@ const handleGameSelect = (game: any) => {
     
     overflow-y: auto;
     overflow-x: hidden; /* Prevent horizontal scrollbar caused by scaled breathing effects */
+}
+
+/* Custom Scrollbar */
+.game-library-container::-webkit-scrollbar {
+    width: 8px;
+}
+.game-library-container::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+}
+.game-library-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+}
+.game-library-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .games-grid {

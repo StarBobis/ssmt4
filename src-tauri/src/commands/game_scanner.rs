@@ -78,27 +78,7 @@ pub fn scan_games(app: AppHandle) -> Result<Vec<GameInfo>, String> {
 
     println!("Scanning games in: {}", normalize_path(&games_dir));
 
-    let mut allowed_games: Option<HashSet<String>> = None;
-    let config_path = games_dir.join("GameIconConfig.json");
-
-    if config_path.exists() {
-        if let Ok(content) = fs::read_to_string(&config_path) {
-            if let Ok(config) = serde_json::from_str::<GameIconConfig>(&content) {
-                let mut set = HashSet::new();
-                for item in config.list {
-                    if item.show {
-                        set.insert(item.game_name);
-                    }
-                }
-                println!("Loaded GameIconConfig with {} allowed games", set.len());
-                allowed_games = Some(set);
-            } else {
-                 println!("Failed to parse GameIconConfig.json");
-            }
-        }
-    } else {
-         println!("GameIconConfig.json not found at {:?}", config_path);
-    }
+    // Previous GameIconConfig.json logic removed as per request to show all games.
 
     let mut games = Vec::new();
     let entries = fs::read_dir(&games_dir)
@@ -110,12 +90,6 @@ pub fn scan_games(app: AppHandle) -> Result<Vec<GameInfo>, String> {
             if path.is_dir() {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                     
-                    if let Some(ref whitelist) = allowed_games {
-                        if !whitelist.contains(name) {
-                            continue;
-                        }
-                    }
-
                     // 构建图片路径，这里直接使用 path.join
                     let icon_path = path.join("Icon.png");
                     let bg_path = path.join("Background.png");
