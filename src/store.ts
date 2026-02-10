@@ -27,7 +27,7 @@ export const appSettings = reactive<AppSettings>({ ...defaultSettings })
 // Load from backend
 async function loadSettings() {
   try {
-    const loaded = await invoke<AppSettings>('load_settings')
+    const loaded = await invoke<AppSettings>('loadSettings')
     // Update reactive object with loaded values
     Object.assign(appSettings, loaded)
   } catch (e) {
@@ -41,7 +41,7 @@ loadSettings()
 // Auto-save behavior
 watch(appSettings, async (newVal) => {
   try {
-    await invoke('save_settings', { config: newVal })
+    await invoke('saveSettings', { config: newVal })
   } catch (e) {
     console.error('Failed to save settings:', e)
   }
