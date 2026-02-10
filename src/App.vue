@@ -221,6 +221,22 @@ html, body {
   padding: 20px;
 }
 
+/* Custom Scrollbar for Content */
+.content-scroll-wrapper::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.content-scroll-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+.content-scroll-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2); 
+  border-radius: 4px;
+}
+.content-scroll-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4); 
+}
+
 /* Glassmorphism for Element Plus Components */
 :deep(.el-card) {
   background-color: rgba(30, 30, 30, 0.6) !important;
