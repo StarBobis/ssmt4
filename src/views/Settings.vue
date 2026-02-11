@@ -16,7 +16,7 @@ const selectCacheDir = async () => {
 </script>
 
 <template>
-  <div class="page-container">
+  <div class="page-container" style="padding: 24px 24px 56px 24px;">
 
     <el-card>
       <template #header>

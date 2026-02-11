@@ -1,9 +1,59 @@
 <script setup lang="ts">
-import { gamesList, switchToGame, appSettings } from '../store';
-import { reactive, type CSSProperties, ref } from 'vue';
+import { gamesList, switchToGame, appSettings, loadGames } from '../store';
+import { reactive, type CSSProperties, ref, onMounted, onUnmounted } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
+import { useRouter } from 'vue-router';
+
+// Router
+const router = useRouter();
 
 // Reactive styles for animation
 const cardStyles = reactive<Record<string, CSSProperties>>({});
+
+// Context Menu State
+const showMenu = ref(false);
+const menuX = ref(0);
+const menuY = ref(0);
+const targetGame = ref<any>(null);
+
+const handleContextMenu = (e: MouseEvent, game: any) => {
+  e.preventDefault();
+  targetGame.value = game;
+  menuX.value = e.clientX;
+  menuY.value = e.clientY;
+  showMenu.value = true;
+};
+
+const closeMenu = () => {
+  showMenu.value = false;
+};
+
+const addToFavorites = async () => {
+  if (!targetGame.value) return;
+  
+  const gameName = targetGame.value.name;
+  
+  try {
+    // True = Show in Sidebar
+    await invoke('set_game_visibility', { gameName, visible: true });
+    await loadGames();
+    
+    // Switch to home page
+    router.push('/');
+  } catch (err) {
+    console.error('Failed to add game to favorites:', err);
+  }
+  
+  closeMenu();
+};
+
+onMounted(() => {
+  document.addEventListener('click', closeMenu);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeMenu);
+});
 
 // Animation Timer Management
 let animationTimers: any[] = [];
@@ -381,12 +431,25 @@ const spawnLoveExplosion = (e: MouseEvent) => {
                 :class="{ active: appSettings.currentConfigName === game.name }"
                 :style="cardStyles[game.name]"
                 @click="handleGameSelect(game, $event)"
+                @contextmenu.prevent="handleContextMenu($event, game)"
             >
                 <div class="game-icon-wrapper">
                     <img :src="game.iconPath" class="game-icon" alt="icon" />
                     <div class="game-label">{{ game.name }}</div>
                 </div>
             </div>
+        </div>
+
+        <!-- Custom Context Menu for Game Library -->
+        <div 
+          v-if="showMenu" 
+          class="context-menu" 
+          :style="{ top: menuY + 'px', left: menuX + 'px' }"
+          @click.stop
+        >
+          <div class="menu-item" @click="addToFavorites">
+            添加此游戏到常用列表
+          </div>
         </div>
     </div>
 </template>
@@ -407,6 +470,33 @@ const spawnLoveExplosion = (e: MouseEvent) => {
     
     overflow-y: auto;
     overflow-x: hidden; /* Prevent horizontal scrollbar caused by scaled breathing effects */
+}
+
+/* Context Menu */
+.context-menu {
+  position: fixed;
+  z-index: 10000;
+  background: rgba(30, 30, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  border-radius: 6px;
+  padding: 4px;
+  min-width: 140px;
+}
+
+.menu-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #eee;
+  font-size: 13px;
+  border-radius: 4px;
+  transition: background-color 0.1s;
+}
+
+.menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
 }
 
 /* Meteor Star CSS */

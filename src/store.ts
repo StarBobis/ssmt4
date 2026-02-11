@@ -27,6 +27,7 @@ export interface GameInfo {
   rawIcon?: string;
   rawBg?: string;
   rawBgVideo?: string;
+  showSidebar: boolean;
 }
 
 const defaultSettings: AppSettings = {
@@ -93,6 +94,7 @@ export async function loadGames() {
         rawIcon: rawIcon,
         rawBg: rawBg,
         rawBgVideo: rawBgVideo,
+        showSidebar: (g as any).showSidebar,
       } as GameInfo;
     });
         

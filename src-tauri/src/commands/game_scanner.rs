@@ -1,6 +1,7 @@
 ﻿use std::fs;
 use tauri::{AppHandle, Manager};
-use serde::{Serialize};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 #[derive(Serialize)]
@@ -10,6 +11,50 @@ pub struct GameInfo {
     pub icon_path: String,
     pub bg_path: String,
     pub bg_video_path: Option<String>,
+    pub show_sidebar: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+struct GameIconSetting {
+    #[serde(rename = "GameName")]
+    game_name: String,
+    #[serde(rename = "Show")]
+    show: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+struct GameIconConfig {
+    #[serde(rename = "GameIconSettingList")]
+    list: Vec<GameIconSetting>,
+}
+
+// Function to find games directory (shared logic)
+fn find_games_dir(app: &AppHandle) -> PathBuf {
+    // 1. 尝试标准的资源目录 (resources/Games)
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let p = resource_dir.join("Games");
+        if p.exists() {
+            return p;
+        }
+    }
+
+    // 2. 尝试从 executable 旁边的 resources/Games 或直接 Games
+    if let Ok(mut exec_dir) = std::env::current_exe() {
+        exec_dir.pop(); // remove executable name
+        
+        let p1 = exec_dir.join("resources").join("Games");
+        if p1.exists() {
+            return p1;
+        }
+
+        let p2 = exec_dir.join("Games");
+        if p2.exists() {
+            return p2;
+        }
+    }
+
+    // 3. 开发环境/默认 fallback
+    PathBuf::from("Games")
 }
 
 // Normalize paths: strip Windows extended prefix and force forward slashes so convertFileSrc gets a POSIX-ish path
@@ -27,43 +72,23 @@ fn normalize_path(p: &Path) -> String {
 
 #[tauri::command]
 pub fn scan_games(app: AppHandle) -> Result<Vec<GameInfo>, String> {
-    // 尝试多个可能的路径来定位 Games 目录
-    let mut games_dir: Option<PathBuf> = None;
+    let games_dir = find_games_dir(&app);
+    println!("Scanning games in: {}", normalize_path(&games_dir));
 
-    // 1. 尝试标准的资源目录 (resources/Games)
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        let p = resource_dir.join("resources").join("Games");
-        if p.exists() {
-            games_dir = Some(p);
-        } else {
-            // 2. 尝试资源目录的根 (Games)
-            let p2 = resource_dir.join("Games");
-            if p2.exists() {
-                games_dir = Some(p2);
+    // Load GameIconConfig.json if it exists
+    let mut sidebar_config: HashMap<String, bool> = HashMap::new();
+    let config_path = games_dir.join("GameIconConfig.json");
+    if config_path.exists() {
+        if let Ok(content) = fs::read_to_string(&config_path) {
+            if let Ok(parsed) = serde_json::from_str::<GameIconConfig>(&content) {
+                for item in parsed.list {
+                    sidebar_config.insert(item.game_name, item.show);
+                }
+            } else {
+                eprintln!("Failed to parse GameIconConfig.json");
             }
         }
     }
-
-    // 3. 开发环境回退：尝试从当前工作目录查找 (D:\Dev\ssmt4\src-tauri\resources\Games)
-    if games_dir.is_none() {
-        // 假设 CWD 是项目根目录
-        let dev_p = Path::new("src-tauri/resources/Games");
-        if let Ok(abs_dev) = std::fs::canonicalize(dev_p) {
-             if abs_dev.exists() { games_dir = Some(abs_dev); }
-        }
-        
-         // 假设 CWD 是 src-tauri
-        let dev_p2 = Path::new("resources/Games");
-        if let Ok(abs_dev) = std::fs::canonicalize(dev_p2) {
-             if abs_dev.exists() { games_dir = Some(abs_dev); }
-        }
-    }
-
-    let games_dir = games_dir.ok_or_else(|| "Games directory not found".to_string())?;
-
-    println!("Scanning games in: {}", normalize_path(&games_dir));
-
-    // Previous GameIconConfig.json logic removed as per request to show all games.
 
     let mut games = Vec::new();
     let entries = fs::read_dir(&games_dir)
@@ -102,11 +127,15 @@ pub fn scan_games(app: AppHandle) -> Result<Vec<GameInfo>, String> {
                         println!("Warning: Background missing for {}: {:?}", name, bg_path);
                     }
 
+                    // Determine show_sidebar status
+                    let show_sidebar = *sidebar_config.get(name).unwrap_or(&false);
+
                     games.push(GameInfo {
                         name: name.to_string(),
                         icon_path: icon_str,
                         bg_path: bg_str,
                         bg_video_path: video_str,
+                        show_sidebar,
                     });
                 }
             }
@@ -115,3 +144,38 @@ pub fn scan_games(app: AppHandle) -> Result<Vec<GameInfo>, String> {
 
     Ok(games)
 }
+
+#[tauri::command]
+pub fn set_game_visibility(app: AppHandle, game_name: String, visible: bool) -> Result<(), String> {
+    let games_dir = find_games_dir(&app);
+    let config_path = games_dir.join("GameIconConfig.json");
+
+    // Read existing config or create new
+    let mut config = if config_path.exists() {
+        let content = fs::read_to_string(&config_path)
+            .map_err(|e| format!("Failed to read config file: {}", e))?;
+        serde_json::from_str::<GameIconConfig>(&content)
+            .map_err(|e| format!("Failed to parse config file: {}", e))?
+    } else {
+        GameIconConfig { list: Vec::new() }
+    };
+
+    // Update or Add entry
+    if let Some(entry) = config.list.iter_mut().find(|x| x.game_name == game_name) {
+        entry.show = visible;
+    } else {
+        config.list.push(GameIconSetting {
+            game_name,
+            show: visible,
+        });
+    }
+
+    // Write back
+    let new_content = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    fs::write(&config_path, new_content)
+        .map_err(|e| format!("Failed to write config file: {}", e))?;
+
+    Ok(())
+}
+

@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="page-container" style="padding: 24px 24px 56px 24px;">
     <h1>常用网址 (Websites)</h1>
     <el-space wrap>
       <el-link type="primary" href="https://element-plus.org" target="_blank">Element Plus</el-link>

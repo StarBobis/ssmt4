@@ -132,8 +132,8 @@ const navTo = (path: string) => {
   left: 0;
   z-index: 9999;
   user-select: none;
-  background: rgba(0, 0, 0, 0.2); /* Slight background for visibility */
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.5); /* Darker background */
+  backdrop-filter: blur(12px); /* stronger blur */
   transition: background 0.3s ease, backdrop-filter 0.3s ease;
 }
 

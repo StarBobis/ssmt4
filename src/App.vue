@@ -46,6 +46,9 @@ const bgStyle = computed(() => {
     ></video>
   </div>
   
+  <!-- Home Ambient Shadow Layer -->
+  <div class="home-shadow-layer" v-if="route.path === '/'"></div>
+
   <!-- Global Mask Layer for Game Library Page -->
   <transition name="fade">
     <div v-if="route.path === '/games'" class="global-dim-layer"></div>
@@ -113,6 +116,26 @@ input, textarea {
   object-fit: cover;
 }
 
+.home-shadow-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0; /* On top of bg-layer (also 0, but later in DOM), behind app-container (1) */
+  pointer-events: none;
+  background: 
+    /* 1. Bottom-Left Shadow: subtle grounding */
+    radial-gradient(circle at 0% 100%, rgba(0, 0, 0, 0.4) 0%, transparent 50%),
+    
+    /* 2. Bottom-Right Shadow: subtle grounding */
+    radial-gradient(circle at 100% 100%, rgba(0, 0, 0, 0.4) 0%, transparent 50%),
+    
+    /* 3. Top-Right to Center-ish Shadow: dramatic diagonal shading */
+    linear-gradient(225deg, rgba(0, 0, 0, 0.3) 0%, transparent 60%);
+  mix-blend-mode: multiply;
+}
+
 .global-dim-layer {
   position: fixed;
   top: 0;
@@ -162,7 +185,7 @@ input, textarea {
   margin-top: 0;
   height: 100%;
   overflow-y: auto;
-  padding: 24px 24px 56px 24px; /* Added extra bottom padding (TitleBar height 32px) to prevent content cutoff */
+  padding: 0 0 32px 0; /* Add 32px bottom padding globally */
   box-sizing: border-box; /* Ensures padding doesn't cause overflow */
 }
 

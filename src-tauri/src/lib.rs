@@ -46,7 +46,8 @@ pub fn run() {
             commands::settings::save_settings,
             commands::settings::load_settings,
             commands::process::run_resource_executable,
-            commands::game_scanner::scan_games
+            commands::game_scanner::scan_games,
+            commands::game_scanner::set_game_visibility
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
