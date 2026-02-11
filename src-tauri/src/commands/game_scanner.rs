@@ -1,18 +1,26 @@
-﻿use std::fs;
-use tauri::{AppHandle, Manager};
+﻿use crate::utils::file_manager::get_global_games_dir;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use crate::utils::file_manager::get_global_games_dir;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
+use tauri::AppHandle;
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum BGType {
+    Image,
+    Video,
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameInfo {
     pub name: String,
-    pub icon_path: String,
-    pub bg_path: String,
-    pub bg_video_path: Option<String>,
-    pub bg_type: String, // "image" or "video"
+    pub icon_path: PathBuf,
+    pub bg_path: PathBuf,
+    pub bg_video_path: Option<PathBuf>,
+    pub bg_type: BGType, // "image" or "video"
     pub show_sidebar: bool,
 }
 
@@ -27,7 +35,7 @@ struct PartialGameConfig {
 #[serde(rename_all = "camelCase")]
 struct PartialBasicSettings {
     #[serde(default)]
-    background_type: Option<String>,
+    background_type: Option<BGType>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -83,49 +91,49 @@ pub fn scan_games(app: AppHandle) -> Result<Vec<GameInfo>, String> {
     }
 
     let mut games = Vec::new();
-    let entries = fs::read_dir(&games_dir)
-        .map_err(|e| format!("Failed to read games directory: {}", e))?;
+    let entries =
+        fs::read_dir(&games_dir).map_err(|e| format!("Failed to read games directory: {}", e))?;
 
     for entry in entries {
         if let Ok(entry) = entry {
             let path = entry.path();
             if path.is_dir() {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    
                     // 构建图片路径
                     let mut bg_path = path.join("Background.png");
                     if !bg_path.exists() {
                         bg_path = path.join("Background.webp");
                     }
-                    
+
                     let icon_path = path.join("Icon.png");
-                    
+
                     // Check for video
                     let mut video_path = path.join("Background.mp4");
                     if !video_path.exists() {
                         video_path = path.join("Background.webm");
                     }
-                    let video_str = if video_path.exists() {
-                        Some(normalize_path(&video_path))
+                    let video_path = if video_path.exists() {
+                        Some(video_path)
                     } else {
                         None
                     };
 
                     // Determine background type from Config.json
-                    let mut bg_type = "image".to_string();
+                    let mut bg_type = BGType::Image;
                     let config_path = path.join("Config.json");
                     if config_path.exists() {
                         if let Ok(content) = fs::read_to_string(&config_path) {
-                           if let Ok(config) = serde_json::from_str::<PartialGameConfig>(&content) {
-                               if let Some(t) = config.basic.background_type {
-                                   bg_type = t;
-                               }
-                           }
+                            if let Ok(config) = serde_json::from_str::<PartialGameConfig>(&content)
+                            {
+                                if let Some(t) = config.basic.background_type {
+                                    bg_type = t;
+                                }
+                            }
                         }
                     }
 
-                    let icon_str = normalize_path(&icon_path);
-                    let bg_str = normalize_path(&bg_path);
+                    // let icon_str = normalize_path(&icon_path);
+                    // let bg_str = normalize_path(&bg_path);
 
                     // 不论文件是否存在都加入列表
                     if !icon_path.exists() {
@@ -138,9 +146,9 @@ pub fn scan_games(app: AppHandle) -> Result<Vec<GameInfo>, String> {
 
                     games.push(GameInfo {
                         name: name.to_string(),
-                        icon_path: icon_str,
-                        bg_path: bg_str,
-                        bg_video_path: video_str,
+                        icon_path,
+                        bg_path,
+                        bg_video_path: video_path,
                         bg_type,
                         show_sidebar,
                     });
@@ -185,4 +193,3 @@ pub fn set_game_visibility(app: AppHandle, game_name: String, visible: bool) -> 
 
     Ok(())
 }
-

@@ -2,7 +2,7 @@
 import { ref, watch, reactive, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { ask, open, message } from '@tauri-apps/plugin-dialog';
-import { openPath } from '@tauri-apps/plugin-opener'; // Updated import
+// import { openPath } from '@tauri-apps/plugin-opener'; // Updated import
 import { join } from '@tauri-apps/api/path';
 import { loadGames, appSettings, gamesList, switchToGame } from '../store'; // Need to reload games list to see new configs
 
@@ -496,8 +496,8 @@ const close = () => {
                 <div class="setting-label">背景设置</div>
                 <div style="margin-bottom: 10px;">
                   <el-radio-group v-model="config.basic.backgroundType" @change="handleBgTypeChange">
-                    <el-radio value="image" label="image">图片</el-radio>
-                    <el-radio value="video" label="video">视频</el-radio>
+                    <el-radio value=Image label="image">图片</el-radio>
+                    <el-radio value=Video label="video">视频</el-radio>
                   </el-radio-group>
                 </div>
                 <!-- Separate check: if video, show video file btn, if image, show image file btn -->
