@@ -5,6 +5,28 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "opener:default"
+    "opener:default",
+    "opener:allow-open-path",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-toggle-maximize",
+    "dialog:default",
+    "fs:allow-read-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        "$RESOURCE/**", 
+        "D:\\Dev\\ssmt4\\src-tauri\\resources\\**", 
+        "D:\\Dev\\ssmt4\\src-tauri\\target\\**",
+        "d:\\Dev\\ssmt4\\src-tauri\\resources\\**",
+        "d:\\Dev\\ssmt4\\src-tauri\\target\\**",
+        "D:/Dev/ssmt4/src-tauri/resources/**",
+        "D:/Dev/ssmt4/src-tauri/target/**",
+        "d:/Dev/ssmt4/src-tauri/resources/**",
+        "d:/Dev/ssmt4/src-tauri/target/**"
+      ]
+    }
   ]
 }

@@ -1,89 +1,77 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { computed, onMounted, onUnmounted } from "vue";
+import { useRoute } from "vue-router";
 import { appSettings } from "./store";
+import TitleBar from "./components/TitleBar.vue";
 
-const isCollapse = ref(false);
+const route = useRoute();
 
-const bgStyle = computed(() => {
-  if (appSettings.bgType === 'image') {
-    return {
-      backgroundImage: `url(${appSettings.bgImage})`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-    }
-  }
-  return {}
-})
+// Disable default right-click context menu
+const preventContextMenu = (event: Event) => {
+  event.preventDefault();
+};
+
+onMounted(() => {
+  document.addEventListener('contextmenu', preventContextMenu);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('contextmenu', preventContextMenu);
+});
+
+/* bgStyle removed, handled in template */
 </script>
 
 <template>
+  <!-- Custom Title Bar -->
+  <TitleBar>
+  </TitleBar>
+
   <!-- Background Layer -->
-  <div class="bg-layer" :style="bgStyle">
-    <video 
-      v-if="appSettings.bgType === 'video'" 
-      :src="appSettings.bgVideo" 
-      autoplay loop muted playsinline 
-      class="bg-video"
-    ></video>
+  <div class="bg-layer">
+    <transition-group name="bg-trans">
+      <!-- Image Background -->
+      <div 
+        v-if="appSettings.bgType === 'image' && appSettings.bgImage"
+        :key="appSettings.bgImage"
+        class="bg-item"
+        :style="{ backgroundImage: `url(${appSettings.bgImage})` }"
+      ></div>
+
+      <!-- Video Background -->
+      <video 
+        v-if="appSettings.bgType === 'video' && appSettings.bgVideo" 
+        :key="appSettings.bgVideo"
+        :src="appSettings.bgVideo" 
+        autoplay loop muted playsinline 
+        class="bg-item"
+      ></video>
+    </transition-group>
   </div>
+  
+  <!-- Home Ambient Shadow Layer -->
+  <div class="home-shadow-layer" v-if="route.path === '/'"></div>
+
+  <!-- Global Mask Layer for Game Library Page -->
+  <transition name="fade">
+    <div v-if="route.path === '/games'" class="global-dim-layer"></div>
+  </transition>
 
   <el-config-provider>
-    <el-container class="app-container">
-      <el-aside width="auto" class="app-aside" :style="{
-        '--sidebar-bg-opacity': appSettings.sidebarOpacity,
-        '--sidebar-blur': `${appSettings.sidebarBlur}px`
-      }">
-        <div class="aside-flex">
-          
-          <el-menu
-            :default-active="$route.path"
-            class="menu-top"
-            router
-            :collapse="isCollapse"
-          >
-            <el-menu-item index="/">
-              <el-icon><HomeFilled /></el-icon>
-              <span>主页</span>
-            </el-menu-item>
-            <el-menu-item index="/workbench">
-              <el-icon><Monitor /></el-icon>
-              <span>工作台</span>
-            </el-menu-item>
-            <el-menu-item index="/stickers">
-              <el-icon><Picture /></el-icon>
-              <span>贴图标记</span>
-            </el-menu-item>
-            <el-menu-item index="/websites">
-              <el-icon><Link /></el-icon>
-              <span>常用网址</span>
-            </el-menu-item>
-          </el-menu>
-
-          <el-menu
-            :default-active="$route.path"
-            class="menu-bottom"
-            router
-            :collapse="isCollapse"
-          >
-            <el-menu-item index="/settings">
-              <el-icon><Setting /></el-icon>
-              <span>设置</span>
-            </el-menu-item>
-          </el-menu>
-        </div>
-      </el-aside>
-      
-      <el-main class="app-main" :style="{
+    <div class="app-container">
+      <main class="app-main" :style="{
         '--content-bg-opacity': appSettings.contentOpacity,
         '--content-blur': `${appSettings.contentBlur}px`
       }">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
-      </el-main>
-    </el-container>
+        <div class="content-scroll-wrapper" :class="{ 'no-scroll': route.path === '/' }">
+          <router-view v-slot="{ Component }">
+            <transition name="fade" mode="out-in">
+              <component :is="Component" />
+            </transition>
+          </router-view>
+        </div>
+      </main>
+    </div>
   </el-config-provider>
 </template>
 
@@ -94,8 +82,24 @@ html, body {
   padding: 0;
   height: 100%;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #000; /* Dark bg */
+  
+  /* Disable text selection */
+  user-select: none;
+
+  /* Cyberpunk Black Fallback: Deep dark with subtle neon glows */
+  background-color: #030305;
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(60, 20, 100, 0.2) 0%, transparent 60%),
+    radial-gradient(circle at 50% 50%, rgba(0, 100, 180, 0.1) 0%, transparent 70%);
+
+  overflow: hidden;
 }
+
+/* Re-enable selection for inputs */
+input, textarea {
+  user-select: text;
+}
+
 #app {
   height: 100%;
   position: relative; /* Need relative for absolute children */
@@ -108,97 +112,128 @@ html, body {
   height: 100%;
   z-index: 0;
   overflow: hidden;
+  background-color: #050505; /* Black fallback for transitions */
 }
-.bg-video {
+
+/* Background Transition Items */
+.bg-item {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  background-size: cover;
+  background-position: center;
+  will-change: opacity;
+}
+
+/* Transition Classes */
+.bg-trans-enter-active,
+.bg-trans-leave-active {
+  transition: opacity 0.6s ease; /* Smooth 0.6s fade */
+}
+
+.bg-trans-enter-from,
+.bg-trans-leave-to {
+  opacity: 0;
+}
+
+.bg-video {
+  /* Removed, replaced by .bg-item */
+}
+
+.home-shadow-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0; /* On top of bg-layer (also 0, but later in DOM), behind app-container (1) */
+  pointer-events: none;
+  background: 
+    /* 1. Bottom-Left Shadow: subtle grounding */
+    radial-gradient(circle at 0% 100%, rgba(0, 0, 0, 0.4) 0%, transparent 50%),
+    
+    /* 2. Bottom-Right Shadow: subtle grounding */
+    radial-gradient(circle at 100% 100%, rgba(0, 0, 0, 0.4) 0%, transparent 50%),
+    
+    /* 3. Top-Right to Center-ish Shadow: dramatic diagonal shading */
+    linear-gradient(225deg, rgba(0, 0, 0, 0.3) 0%, transparent 60%);
+  mix-blend-mode: multiply;
+}
+
+.global-dim-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0; /* Above bg-layer (0 via DOM order), below App Content (1) */
+  pointer-events: none; /* Let clicks pass through if needed, though standard bg doesn't need interactions */
+  
+  /* Center Radiating Light Background (Copied from GameLibrary.vue) */
+    background: radial-gradient(
+        circle at 50% 50%, 
+        rgba(0, 0, 0, 0.6) 0%, 
+        rgba(0, 0, 0, 0.9) 50%, 
+        rgba(0, 0, 0, 0.98) 90%
+    );
 }
 </style>
 
 <style scoped>
 .app-container {
   height: 100vh;
+  width: 100vw;
   overflow: hidden;
-  background-color: transparent;
   position: relative;
   z-index: 1; /* Above bg */
-}
-
-.app-aside {
-  /* Glassmorphism effect - Configurable */
-  /* Switched to Black base (rgba(0,0,0)) to ensure white text remains visible even at 100% opacity */
-  background-color: rgba(0, 0, 0, var(--sidebar-bg-opacity, 0.3)) !important; 
-  backdrop-filter: blur(var(--sidebar-blur, 20px)) saturate(150%);
-  -webkit-backdrop-filter: blur(var(--sidebar-blur, 20px)) saturate(150%);
-  border-right: 1px solid rgba(255, 255, 255, 0.15); /* Subtler border for dark theme */
-  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.2); 
-  transition: background-color 0.3s, backdrop-filter 0.3s;
-}
-
-.aside-flex {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background-color: transparent;
-}
-
-/* Menu Visibility Tuning */
-:deep(.el-menu) {
-  background-color: transparent !important;
-  border-right: none;
-}
-
-/* Default State: White text with shadow for readability on any background */
-:deep(.el-menu-item), :deep(.el-sub-menu__title) {
-  background-color: transparent !important;
-  color: #ffffff !important;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); /* Strong shadow */
-  transition: background-color 0.2s, color 0.2s;
-}
-
-/* Icons: Same treatment */
-:deep(.el-menu-item .el-icon), :deep(.el-sub-menu__title .el-icon) {
-  color: #ffffff !important;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
-}
-
-/* Hover State: Subtle light wash */
-:deep(.el-menu-item:hover), :deep(.el-sub-menu__title:hover) {
-  background-color: rgba(255, 255, 255, 0.2) !important;
-}
-
-/* Active State: Darker/Colored background to ensure white text is visible */
-:deep(.el-menu-item.is-active) {
-  background-color: var(--el-color-primary) !important; /* Solid primary color */
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2); /* Lift effect */
-  text-shadow: none; /* Shadow not needed on dark bg */
-}
-
-.menu-top {
-  flex-grow: 1;
-  border-right: none !important;
-  overflow-y: auto;
-}
-
-.menu-bottom {
-  flex-grow: 0;
-  border-right: none !important;
-  border-top: 1px solid rgba(0,0,0,0.1);
+  padding-top: 32px; /* TitleBar height */
 }
 
 .app-main {
-  padding: 20px;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
   /* Content area: Configurable */
   background-color: rgba(255, 255, 255, var(--content-bg-opacity, 0.55)); 
   backdrop-filter: blur(var(--content-blur, 3px)); 
-  overflow-y: auto;
-  overflow-y: auto;
   transition: opacity 0.5s ease;
   
   /* Dark Glass Style Overrides */
   background-color: rgba(0, 0, 0, var(--content-bg-opacity, 0.4)); 
   color: #ffffff;
+}
+
+.content-scroll-wrapper {
+  margin-top: 0;
+  height: 100%;
+  overflow-y: auto;
+  padding: 0 0 32px 0; /* Add 32px bottom padding globally */
+  box-sizing: border-box; /* Ensures padding doesn't cause overflow */
+}
+
+/* Custom Scrollbar for Content */
+.content-scroll-wrapper::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.content-scroll-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+.content-scroll-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2); 
+  border-radius: 4px;
+}
+.content-scroll-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4); 
+}
+
+.no-scroll {
+  overflow-y: hidden !important;
 }
 
 /* Glassmorphism for Element Plus Components */

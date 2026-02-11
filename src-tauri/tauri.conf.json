@@ -12,25 +12,43 @@
   "app": {
     "windows": [
       {
-        "center": true, 
+        "center": true,
         "title": "SSMT4 V0.0.1",
         "width": 1000,
-        "height": 600
+        "height": 600,
+        "minWidth": 1000,
+        "minHeight": 600,
+        "decorations": false,
+        "backgroundColor": "#000000"
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' asset: http: https: file: data:; frame-src *;",
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APP/**",
+          "$RESOURCE/**",
+          "src-tauri/resources/**",
+          "target/**",
+          "$LOCALDATA/**",
+          "$APPDATA/**"
+        ]
+      }
     } 
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+      "resources": [
+        "resources/**/*"
+      ]
   }
 }

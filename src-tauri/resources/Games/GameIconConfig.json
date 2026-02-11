@@ -1,0 +1,36 @@
+{
+  "GameIconSettingList": [
+    {
+      "GameName": "WWMI",
+      "Show": true
+    },
+    {
+      "GameName": "GIMI",
+      "Show": true
+    },
+    {
+      "GameName": "SRMI",
+      "Show": true
+    },
+    {
+      "GameName": "HIMI",
+      "Show": true
+    },
+    {
+      "GameName": "ZZMI",
+      "Show": true
+    },
+    {
+      "GameName": "IdentityV2",
+      "Show": true
+    },
+    {
+      "GameName": "GF2",
+      "Show": true
+    },
+    {
+      "GameName": "EFMI",
+      "Show": true
+    }
+  ]
+}

@@ -1,12 +1,12 @@
 use crate::configs::app_config::AppConfig;
 
-#[tauri::command(rename = "loadSettings")]
-pub fn load() -> AppConfig {
+#[tauri::command]
+pub fn load_settings() -> Result<AppConfig, String> {
     AppConfig::load()
 }
 
-#[tauri::command(rename = "saveSettings")]
-pub fn save(config: AppConfig) -> Result<(), String> {
+#[tauri::command]
+pub fn save_settings(config: AppConfig) -> Result<(), String> {
     config.save()
 }
 

@@ -5,6 +5,7 @@ use crate::utils::file_manager;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")] // Match JS conventions
+#[serde(default)]
 pub struct AppConfig {
     pub bg_type: String,
     pub bg_image: String,
@@ -13,18 +14,29 @@ pub struct AppConfig {
     pub sidebar_blur: f64,
     pub content_opacity: f64,
     pub content_blur: f64,
+    pub cache_dir: String,
+    pub current_config_name: String,
+    pub window_width: f64,
+    pub window_height: f64,
+    #[serde(default)]
+    pub github_token: String,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             bg_type: "image".to_string(),
-            bg_image: "/background.png".to_string(), // Keep defaults similar to frontend
-            bg_video: "/background.webm".to_string(),
+            bg_image: "".to_string(), 
+            bg_video: "".to_string(),
             sidebar_opacity: 0.3,
             sidebar_blur: 20.0,
             content_opacity: 0.2,
             content_blur: 3.0,
+            cache_dir: "".to_string(),
+            current_config_name: "Default".to_string(),
+            window_width: 1000.0,
+            window_height: 600.0,
+            github_token: "".to_string(),
         }
     }
 }
@@ -48,21 +60,48 @@ impl AppConfig {
         }
     }
 
-    pub fn load() -> Self {
-        if let Some(path) = Self::get_config_path() {
+    pub fn load() -> Result<Self, String> {
+        let mut config = if let Some(path) = Self::get_config_path() {
+            println!("Loading settings from: {:?}", path);
             if path.exists() {
-                if let Ok(content) = fs::read_to_string(&path) {
-                    if let Ok(config) = serde_json::from_str(&content) {
-                        return config;
+                let content = fs::read_to_string(&path)
+                    .map_err(|e| format!("Failed to read settings file: {}", e))?;
+                
+                println!("Settings content: {}", content);
+                match serde_json::from_str::<Self>(&content) {
+                    Ok(c) => c,
+                    Err(e) => {
+                         println!("Failed to parse settings, using defaults: {}", e);
+                         Self::default()
                     }
                 }
+            } else {
+                println!("Settings file does not exist, using defaults");
+                Self::default()
+            }
+        } else {
+            Self::default()
+        };
+
+        // Auto-initialize cache_dir if empty
+        if config.cache_dir.is_empty() {
+            if let Ok(local_data) = std::env::var("LOCALAPPDATA") {
+                 let default_cache = PathBuf::from(local_data).join("SSMT4CachedFolder");
+                 if !default_cache.exists() {
+                     let _ = fs::create_dir_all(&default_cache);
+                 }
+                 config.cache_dir = default_cache.to_string_lossy().to_string();
+                 // Save the initialized value immediately
+                 let _ = config.save();
             }
         }
-        Self::default()
+        
+        Ok(config)
     }
 
     pub fn save(&self) -> Result<(), String> {
         if let Some(path) = Self::get_config_path() {
+            println!("Saving settings to: {:?}", path);
             let content = serde_json::to_string_pretty(self)
                 .map_err(|e| format!("Serialization error: {}", e))?;
             
@@ -74,3 +113,4 @@ impl AppConfig {
         }
     }
 }
+
