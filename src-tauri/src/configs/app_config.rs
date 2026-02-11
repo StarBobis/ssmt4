@@ -16,6 +16,8 @@ pub struct AppConfig {
     pub content_blur: f64,
     pub cache_dir: String,
     pub current_config_name: String,
+    pub window_width: f64,
+    pub window_height: f64,
 }
 
 impl Default for AppConfig {
@@ -30,6 +32,8 @@ impl Default for AppConfig {
             content_blur: 3.0,
             cache_dir: "".to_string(),
             current_config_name: "Default".to_string(),
+            window_width: 1000.0,
+            window_height: 600.0,
         }
     }
 }

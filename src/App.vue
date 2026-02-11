@@ -1,10 +1,23 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { appSettings } from "./store";
 import TitleBar from "./components/TitleBar.vue";
 
 const route = useRoute();
+
+// Disable default right-click context menu
+const preventContextMenu = (event: Event) => {
+  event.preventDefault();
+};
+
+onMounted(() => {
+  document.addEventListener('contextmenu', preventContextMenu);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('contextmenu', preventContextMenu);
+});
 
 const bgStyle = computed(() => {
   if (appSettings.bgType === 'image') {
@@ -44,7 +57,7 @@ const bgStyle = computed(() => {
         '--content-bg-opacity': appSettings.contentOpacity,
         '--content-blur': `${appSettings.contentBlur}px`
       }">
-        <div class="content-scroll-wrapper">
+        <div class="content-scroll-wrapper" :class="{ 'no-scroll': route.path === '/' }">
           <router-view v-slot="{ Component }">
             <transition name="fade" mode="out-in">
               <component :is="Component" />
@@ -64,6 +77,9 @@ html, body {
   height: 100%;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   
+  /* Disable text selection */
+  user-select: none;
+
   /* Cyberpunk Black Fallback: Deep dark with subtle neon glows */
   background-color: #030305;
   background-image: 
@@ -72,6 +88,12 @@ html, body {
 
   overflow: hidden;
 }
+
+/* Re-enable selection for inputs */
+input, textarea {
+  user-select: text;
+}
+
 #app {
   height: 100%;
   position: relative; /* Need relative for absolute children */
@@ -158,6 +180,10 @@ html, body {
 }
 .content-scroll-wrapper::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.4); 
+}
+
+.no-scroll {
+  overflow-y: hidden !important;
 }
 
 /* Glassmorphism for Element Plus Components */

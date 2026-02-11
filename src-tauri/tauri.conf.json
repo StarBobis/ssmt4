@@ -16,6 +16,8 @@
         "title": "SSMT4 V0.0.1",
         "width": 1000,
         "height": 600,
+        "minWidth": 1000,
+        "minHeight": 600,
         "decorations": false,
         "backgroundColor": "#000000"
       }
