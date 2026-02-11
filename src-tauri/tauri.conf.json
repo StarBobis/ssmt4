@@ -30,7 +30,9 @@
           "$APP/**",
           "$RESOURCE/**",
           "src-tauri/resources/**",
-          "target/**"
+          "target/**",
+          "$LOCALDATA/**",
+          "$APPDATA/**"
         ]
       }
     } 

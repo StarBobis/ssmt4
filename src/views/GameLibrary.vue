@@ -434,7 +434,13 @@ const spawnLoveExplosion = (e: MouseEvent) => {
                 @contextmenu.prevent="handleContextMenu($event, game)"
             >
                 <div class="game-icon-wrapper">
-                    <img :src="game.iconPath" class="game-icon" alt="icon" />
+                    <img 
+                        :src="game.iconPath" 
+                        class="game-icon" 
+                        alt="icon" 
+                        @load="(e) => (e.target as HTMLImageElement).style.opacity = '1'"
+                        @error="(e) => (e.target as HTMLImageElement).style.opacity = '0'"
+                    />
                     <div class="game-label">{{ game.name }}</div>
                 </div>
             </div>

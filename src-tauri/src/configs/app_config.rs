@@ -58,25 +58,42 @@ impl AppConfig {
     }
 
     pub fn load() -> Result<Self, String> {
-        if let Some(path) = Self::get_config_path() {
+        let mut config = if let Some(path) = Self::get_config_path() {
             println!("Loading settings from: {:?}", path);
             if path.exists() {
                 let content = fs::read_to_string(&path)
                     .map_err(|e| format!("Failed to read settings file: {}", e))?;
                 
                 println!("Settings content: {}", content);
-                let config = serde_json::from_str::<Self>(&content)
-                    .map_err(|e| format!("Failed to parse settings.json: {}", e))?;
-                    
-                println!("Loaded config successfully: {:?}", config);
-                return Ok(config);
+                match serde_json::from_str::<Self>(&content) {
+                    Ok(c) => c,
+                    Err(e) => {
+                         println!("Failed to parse settings, using defaults: {}", e);
+                         Self::default()
+                    }
+                }
             } else {
                 println!("Settings file does not exist, using defaults");
-                Ok(Self::default())
+                Self::default()
             }
         } else {
-            Ok(Self::default())
+            Self::default()
+        };
+
+        // Auto-initialize cache_dir if empty
+        if config.cache_dir.is_empty() {
+            if let Ok(local_data) = std::env::var("LOCALAPPDATA") {
+                 let default_cache = PathBuf::from(local_data).join("SSMT4CachedFolder");
+                 if !default_cache.exists() {
+                     let _ = fs::create_dir_all(&default_cache);
+                 }
+                 config.cache_dir = default_cache.to_string_lossy().to_string();
+                 // Save the initialized value immediately
+                 let _ = config.save();
+            }
         }
+        
+        Ok(config)
     }
 
     pub fn save(&self) -> Result<(), String> {

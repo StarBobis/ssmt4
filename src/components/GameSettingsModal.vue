@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, reactive } from 'vue';
+import { ref, watch, reactive, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { ask, open } from '@tauri-apps/plugin-dialog';
+import { ask, open, message } from '@tauri-apps/plugin-dialog';
 import { openPath } from '@tauri-apps/plugin-opener'; // Updated import
 import { join } from '@tauri-apps/api/path';
-import { loadGames, appSettings } from '../store'; // Need to reload games list to see new configs
+import { loadGames, appSettings, gamesList, switchToGame } from '../store'; // Need to reload games list to see new configs
 
 const props = defineProps<{
   modelValue: boolean;
@@ -99,7 +99,7 @@ const loadConfig = async () => {
     const data = await invoke<GameConfig>('load_game_config', { gameName: props.gameName });
     // Merge
     config.basic = {
-        gamePreset: data.basic.gamePreset || 'Default',
+        gamePreset: data.basic.gamePreset || 'GIMI',
         backgroundType: (data.basic as any).backgroundType || 'image'
     };
     
@@ -113,8 +113,8 @@ const loadConfig = async () => {
         autoSetAnalyseOptions: t.autoSetAnalyseOptions !== undefined ? t.autoSetAnalyseOptions : true,
         useShell: t.useShell || false,
         useUpx: t.useUpx || false,
-        delay: t.delay || 0,
-        autoExitSeconds: t.autoExitSeconds || 0,
+        delay: t.delay !== undefined ? t.delay : 100,
+        autoExitSeconds: t.autoExitSeconds !== undefined ? t.autoExitSeconds : 5,
         extraDll: t.extraDll || ''
     };
     
@@ -148,6 +148,14 @@ const saveConfig = async () => {
   } catch (e) {
     console.error('Failed to save game config:', e);
   }
+};
+
+const handleBgTypeChange = async () => {
+    await saveConfig();
+    // Refresh global state if this is the active game
+    if (appSettings.currentConfigName === props.gameName) {
+        await loadGames();
+    }
 };
 
 const selectIcon = async () => {
@@ -191,6 +199,34 @@ const selectBackground = async () => {
         }
     } catch (e) {
         console.error(e);
+    }
+};
+
+const autoSupportedPresets = ['GIMI', 'HIMI', 'SRMI', 'ZZMI'];
+const canAutoUpdate = computed(() => autoSupportedPresets.includes(config.basic.gamePreset));
+
+const autoUpdateBackground = async () => {
+    try {
+        isLoading.value = true;
+        await invoke('update_game_background', {
+            gameName: props.gameName,
+            gamePreset: config.basic.gamePreset,
+            bgType: config.basic.backgroundType
+        });
+        await loadGames();
+        await message('Background updated successfully!', { title: 'Success', kind: 'info' });
+        
+         if (appSettings.currentConfigName === props.gameName) {
+            // Force refresh UI if active
+            const current = gamesList.find(g => g.name === props.gameName);
+            if (current) switchToGame(current);
+        }
+
+    } catch (e) {
+        console.error(e);
+        await message(`Update failed: ${e}`, { title: 'Error', kind: 'error' });
+    } finally {
+        isLoading.value = false;
     }
 };
 
@@ -278,6 +314,13 @@ const createNewConfig = async () => {
     
     // Refresh games list and close
     await loadGames();
+    
+    // Switch to the newly created game
+    const newGame = gamesList.find(g => g.name === configName.value);
+    if (newGame) {
+        switchToGame(newGame);
+    }
+
     close(); 
   } catch (e) {
     console.error('Failed to create new config:', e);
@@ -329,7 +372,7 @@ const close = () => {
 
 <template>
   <transition name="modal-fade">
-    <div v-if="modelValue" class="settings-overlay" @click.self="close">
+    <div v-if="modelValue" class="settings-overlay">
       <div class="settings-window">
         <!-- Sidebar -->
         <div class="settings-sidebar">
@@ -400,15 +443,20 @@ const close = () => {
                <div class="setting-group">
                 <div class="setting-label">背景设置</div>
                 <div style="margin-bottom: 10px;">
-                  <el-radio-group v-model="config.basic.backgroundType">
+                  <el-radio-group v-model="config.basic.backgroundType" @change="handleBgTypeChange">
                     <el-radio value="image" label="image">图片</el-radio>
                     <el-radio value="video" label="video">视频</el-radio>
                   </el-radio-group>
                 </div>
                 <!-- Separate check: if video, show video file btn, if image, show image file btn -->
-                <button class="action-btn" @click="selectBackground">
-                   {{ config.basic.backgroundType === 'video' ? '选择背景视频' : '选择背景图片' }}
-                </button>
+                <div class="button-row">
+                    <button class="action-btn" @click="selectBackground">
+                       {{ config.basic.backgroundType === 'video' ? '选择背景视频' : '选择背景图片' }}
+                    </button>
+                    <button v-if="canAutoUpdate" class="action-btn" @click="autoUpdateBackground">
+                       自动更新背景
+                    </button>
+                </div>
               </div>
             </div>
 
@@ -434,7 +482,7 @@ const close = () => {
               </div>
 
                <div class="setting-group">
-                 <div class="setting-label">启动器路径 (Launcher Exe)</div>
+                 <div class="setting-label">启动文件路径 (Launcher Exe)</div>
                  <input v-model="config.threeDMigoto.launcherExePath" type="text" class="custom-input" placeholder="选择启动器 (可选)" />
                  <div class="button-row">
                   <button class="action-btn" @click="pickExe('launcherExePath')">选择文件</button>
@@ -450,7 +498,7 @@ const close = () => {
               <div class="setting-checkbox-row">
                  <label class="checkbox-label">
                     <input type="checkbox" v-model="config.threeDMigoto.showErrorPopup" />
-                    显示左上角报错 (Error Popup)
+                    显示左上角报错 (show_warnings)
                  </label>
               </div>
 
@@ -517,14 +565,14 @@ const close = () => {
   background-color: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
   z-index: 2000; /* High z-index */
-  display: flex;
-  justify-content: center;
-  align-items: center;
 }
 
 .settings-window {
-  width: 700px;
-  height: 500px;
+  position: absolute;
+  top: 50px;
+  bottom: 60px;
+  left: 100px;
+  right: 100px;
   background: rgba(30, 30, 30, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);

@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
-use serde::{Deserialize, Serialize};
+use crate::utils::file_manager::get_global_games_dir;
+use serde::{Deserialize, Serialize}; // Added missing import
+use std::io::Write; // check imports
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -36,35 +38,7 @@ pub struct GameConfig {
 }
 
 fn get_game_config_path(app: &AppHandle, game_name: &str) -> PathBuf {
-    // Helper from game_scanner (but private there), so we duplicate or move logic. 
-    // Ideally we share "find_games_dir" logic.
-    // For now, let's look at how "scan_games" finds it. 
-    // It's better to expose "find_games_dir" from game_scanner or move it to common utils.
-    // Or just re-implement simple check for now since I can't easily refactor shared code without multiple edits.
-    
-    // We will assume the standard location logic:
-    // 1. resource_dir/Games
-    // 2. adjacent Games folder
-    
-    let mut games_dir = PathBuf::from("Games"); // Default fallback
-    
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        let p = resource_dir.join("Games");
-        if p.exists() {
-            games_dir = p;
-        }
-    }
-    
-    // Check adjacent to exe if not found in resources (dev mode fallback mostly)
-    if !games_dir.exists() {
-         if let Ok(mut exec_dir) = std::env::current_exe() {
-            exec_dir.pop(); 
-            let p1 = exec_dir.join("resources").join("Games");
-            if p1.exists() { games_dir = p1; }
-            else if exec_dir.join("Games").exists() { games_dir = exec_dir.join("Games"); }
-        }
-    }
-    
+    let games_dir = get_global_games_dir(app);
     games_dir.join(game_name).join("Config.json")
 }
 
@@ -180,6 +154,11 @@ pub fn set_game_background(app: AppHandle, game_name: String, file_path: String,
     fs::copy(&source_path, &target_path)
         .map_err(|e| format!("Failed to copy file from {} to {:?}: {}", file_path, target_path, e))?;
         
+    // Update Config.json with the new type
+    let mut config = load_game_config(app.clone(), game_name.clone()).unwrap_or(GameConfig::default());
+    config.basic.background_type = bg_type;
+    save_game_config(app.clone(), game_name, config).map_err(|e| format!("Failed to update config: {}", e))?;
+
     Ok(())
 }
 
@@ -200,5 +179,84 @@ pub fn set_game_icon(app: AppHandle, game_name: String, file_path: String) -> Re
     fs::copy(&source_path, &target_path)
         .map_err(|e| format!("Failed to copy icon: {}", e))?;
         
+    Ok(())
+}
+#[tauri::command]
+pub async fn update_game_background(app: AppHandle, game_name: String, game_preset: String, bg_type: String) -> Result<(), String> {
+    let game_id = match game_preset.as_str() {
+        "GIMI" => "1Z8W5NHUQb",
+        "HIMI" => "osvnlOc0S8",
+        "SRMI" => "64kMb5iAWu",
+        "ZZMI" => "x6znKlJ0xK",
+        _ => return Err("Unsupported game preset for auto-update".to_string()),
+    };
+
+    let url = format!("https://hyp-api.mihoyo.com/hyp/hyp-connect/api/getAllGameBasicInfo?launcher_id=jGHBHlcOq1&language=zh-cn&game_id={}", game_id);
+    
+    let resp = reqwest::get(&url).await.map_err(|e| format!("Request failed: {}", e))?;
+    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Failed to parse JSON: {}", e))?;
+    
+    // Parse
+    let data = json.get("data").ok_or("Missing data field")?;
+    let list = data.get("game_info_list").and_then(|v| v.as_array()).ok_or("Missing game_info_list")?;
+    let first = list.get(0).ok_or("Empty game info list")?;
+    let backgrounds = first.get("backgrounds").and_then(|v| v.as_array()).ok_or("Missing backgrounds")?;
+    let first_bg = backgrounds.get(0).ok_or("Empty backgrounds list")?;
+    
+    let target_url = if bg_type == "video" {
+         first_bg.get("video")
+            .and_then(|v| v.get("url"))
+            .and_then(|v| v.as_str())
+            .ok_or("No video URL found")?
+    } else {
+         first_bg.get("background")
+            .and_then(|v| v.get("url"))
+            .and_then(|v| v.as_str())
+            .ok_or("No image URL found")?
+    };
+    
+    println!("Downloading background from: {}", target_url);
+    
+    // Download
+    let download_resp = reqwest::get(target_url).await.map_err(|e| format!("Download failed: {}", e))?;
+    let bytes = download_resp.bytes().await.map_err(|e| format!("Failed to get bytes: {}", e))?;
+    
+    // Save
+    let config_path = get_game_config_path(&app, &game_name);
+    let game_dir = config_path.parent().ok_or("Invalid path")?;
+    
+    // Determine filename extension from URL or just use strict defaults
+    // URL might not have extension if signed? usually it does.
+    let ext = if bg_type == "video" { "mp4" } else { "png" }; // Default fallback
+    // Try to get from url
+    let url_path = std::path::Path::new(target_url);
+    let url_ext = url_path.extension().and_then(|s| s.to_str()).unwrap_or(ext);
+    
+    let filename = format!("Background.{}", url_ext);
+    let target_path = game_dir.join(&filename);
+    
+    // Clean old
+    if bg_type == "image" {
+        let candidates = ["Background.png", "Background.webp", "Background.jpg", "Background.jpeg"]; 
+        for c in candidates {
+            let p = game_dir.join(c);
+            if p.exists() { let _ = fs::remove_file(p); }
+        }
+    } else {
+        // video
+        let candidates = ["Background.mp4", "Background.webm", "Background.mkv"]; 
+        for c in candidates {
+            let p = game_dir.join(c);
+            if p.exists() { let _ = fs::remove_file(p); }
+        }
+    }
+    
+    fs::write(&target_path, bytes).map_err(|e| format!("Failed to write file: {}", e))?;
+    
+    // Update config
+    let mut config = load_game_config(app.clone(), game_name.clone()).unwrap_or(GameConfig::default());
+    config.basic.background_type = bg_type.clone();
+    save_game_config(app.clone(), game_name, config).map_err(|e| format!("Failed to save config: {}", e))?;
+    
     Ok(())
 }

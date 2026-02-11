@@ -140,7 +140,13 @@ onUnmounted(() => {
                 @click.stop="handleGameClick(game)"
                 @contextmenu.prevent="handleContextMenu($event, game)"
             >
-              <img :src="game.iconPath" :alt="game.name" loading="lazy" />
+              <img 
+                  :src="game.iconPath" 
+                  :alt="game.name" 
+                  loading="lazy" 
+                  @load="(e) => (e.target as HTMLImageElement).style.opacity = '1'"
+                  @error="(e) => (e.target as HTMLImageElement).style.opacity = '0'"
+              />
             </div>
           </el-tooltip>
         </div>
@@ -367,8 +373,12 @@ onUnmounted(() => {
 
 /* Hover Effect: Flip Colors for Start Button */
 .start-game-btn:hover {
-  background-color: #000000;
+  background-color: #333333;
   color: #F7CE46;
+}
+
+.start-game-btn:active {
+  background-color: #000000;
 }
 
 .start-game-btn:hover .icon-wrapper {
@@ -376,6 +386,10 @@ onUnmounted(() => {
 }
 
 .start-game-btn:hover .play-triangle {
+  border-color: transparent transparent transparent #333333;
+}
+
+.start-game-btn:active .play-triangle {
   border-color: transparent transparent transparent #000000;
 }
 

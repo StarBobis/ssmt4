@@ -2,6 +2,7 @@
 use tauri::{AppHandle, Manager};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use crate::utils::file_manager::get_global_games_dir;
 use std::path::{Path, PathBuf};
 
 #[derive(Serialize)]
@@ -16,12 +17,14 @@ pub struct GameInfo {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct PartialGameConfig {
     #[serde(default)]
     basic: PartialBasicSettings,
 }
 
 #[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct PartialBasicSettings {
     #[serde(default)]
     background_type: Option<String>,
@@ -43,31 +46,7 @@ struct GameIconConfig {
 
 // Function to find games directory (shared logic)
 fn find_games_dir(app: &AppHandle) -> PathBuf {
-    // 1. 尝试标准的资源目录 (resources/Games)
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        let p = resource_dir.join("Games");
-        if p.exists() {
-            return p;
-        }
-    }
-
-    // 2. 尝试从 executable 旁边的 resources/Games 或直接 Games
-    if let Ok(mut exec_dir) = std::env::current_exe() {
-        exec_dir.pop(); // remove executable name
-        
-        let p1 = exec_dir.join("resources").join("Games");
-        if p1.exists() {
-            return p1;
-        }
-
-        let p2 = exec_dir.join("Games");
-        if p2.exists() {
-            return p2;
-        }
-    }
-
-    // 3. 开发环境/默认 fallback
-    PathBuf::from("Games")
+    get_global_games_dir(app)
 }
 
 // Normalize paths: strip Windows extended prefix and force forward slashes so convertFileSrc gets a POSIX-ish path
