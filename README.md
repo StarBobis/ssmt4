@@ -21,6 +21,10 @@ https://github.com/user-attachments/assets/ba4b2405-66ae-4a50-b6dd-361d783c755f
 - 哈基米德
 - 37
 - ﹎Tmo⚓️Ch﹎
+- 虹汐哥
+- 隐隐 少姜
+- 概率触发，连续复读!
+- 飞行鸟绒
 
 大力赞助的AI Token米 支持！
 

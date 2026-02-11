@@ -2,6 +2,7 @@
 import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { gamesList, switchToGame, appSettings, loadGames } from '../store' 
 import { invoke } from '@tauri-apps/api/core'
+import GameSettingsModal from '../components/GameSettingsModal.vue'
 
 // Computed property to get sidebar games (filtered and reverse order)
 const sidebarGames = computed(() => {
@@ -57,6 +58,8 @@ const hideGame = async () => {
   closeMenu();
 };
 
+const showSettings = ref(false);
+
 onMounted(() => {
   document.addEventListener('click', closeMenu);
 });
@@ -109,6 +112,12 @@ onUnmounted(() => {
 
     </div>
 
+    <!-- Settings Modal -->
+    <GameSettingsModal 
+      v-model="showSettings" 
+      :game-name="appSettings.currentConfigName"
+    />
+
     <div class="action-bar">
       <!-- Start Game Button -->
       <div class="start-game-btn">
@@ -129,10 +138,13 @@ onUnmounted(() => {
         </div>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item>游戏设置</el-dropdown-item>
-            <el-dropdown-item>管理存档</el-dropdown-item>
-            <el-dropdown-item>浏览本地文件</el-dropdown-item>
-            <el-dropdown-item divided>卸载游戏</el-dropdown-item>
+            <el-dropdown-item @click="showSettings = true">游戏设置</el-dropdown-item>
+            <el-dropdown-item>打开3Dmigoto文件夹</el-dropdown-item>
+            <el-dropdown-item>打开d3dx.ini</el-dropdown-item>
+            <el-dropdown-item divided>开启Symlink</el-dropdown-item>
+            <el-dropdown-item>关闭Symlink</el-dropdown-item>
+            <el-dropdown-item divided>检查3Dmigoto包更新</el-dropdown-item>
+
           </el-dropdown-menu>
         </template>
       </el-dropdown>
