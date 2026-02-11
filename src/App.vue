@@ -19,16 +19,7 @@ onUnmounted(() => {
   document.removeEventListener('contextmenu', preventContextMenu);
 });
 
-const bgStyle = computed(() => {
-  if (appSettings.bgType === 'image') {
-    return {
-      backgroundImage: `url(${appSettings.bgImage})`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-    }
-  }
-  return {}
-})
+/* bgStyle removed, handled in template */
 </script>
 
 <template>
@@ -37,13 +28,25 @@ const bgStyle = computed(() => {
   </TitleBar>
 
   <!-- Background Layer -->
-  <div class="bg-layer" :style="bgStyle">
-    <video 
-      v-if="appSettings.bgType === 'video'" 
-      :src="appSettings.bgVideo" 
-      autoplay loop muted playsinline 
-      class="bg-video"
-    ></video>
+  <div class="bg-layer">
+    <transition-group name="bg-trans">
+      <!-- Image Background -->
+      <div 
+        v-if="appSettings.bgType === 'image'"
+        :key="appSettings.bgImage"
+        class="bg-item"
+        :style="{ backgroundImage: `url(${appSettings.bgImage})` }"
+      ></div>
+
+      <!-- Video Background -->
+      <video 
+        v-if="appSettings.bgType === 'video'" 
+        :key="appSettings.bgVideo"
+        :src="appSettings.bgVideo" 
+        autoplay loop muted playsinline 
+        class="bg-item"
+      ></video>
+    </transition-group>
   </div>
   
   <!-- Home Ambient Shadow Layer -->
@@ -109,11 +112,35 @@ input, textarea {
   height: 100%;
   z-index: 0;
   overflow: hidden;
+  background-color: #050505; /* Black fallback for transitions */
 }
-.bg-video {
+
+/* Background Transition Items */
+.bg-item {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  background-size: cover;
+  background-position: center;
+  will-change: opacity;
+}
+
+/* Transition Classes */
+.bg-trans-enter-active,
+.bg-trans-leave-active {
+  transition: opacity 0.6s ease; /* Smooth 0.6s fade */
+}
+
+.bg-trans-enter-from,
+.bg-trans-leave-to {
+  opacity: 0;
+}
+
+.bg-video {
+  /* Removed, replaced by .bg-item */
 }
 
 .home-shadow-layer {
