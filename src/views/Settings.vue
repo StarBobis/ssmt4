@@ -31,6 +31,9 @@ const selectCacheDir = async () => {
             <el-button @click="selectCacheDir">选择文件夹</el-button>
           </div>
         </el-form-item>
+        <el-form-item label="GitHub Token">
+           <el-input v-model="appSettings.githubToken" placeholder="可选: 填写Token可提高API请求限额" type="password" show-password />
+        </el-form-item>
       </el-form>
     </el-card>
 

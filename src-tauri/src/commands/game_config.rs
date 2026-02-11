@@ -2,8 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 use crate::utils::file_manager::get_global_games_dir;
-use serde::{Deserialize, Serialize}; // Added missing import
-use std::io::Write; // check imports
+use crate::configs::app_config::AppConfig;
+use serde::{Deserialize, Serialize};
+use std::io::{Write, Cursor};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -258,5 +259,153 @@ pub async fn update_game_background(app: AppHandle, game_name: String, game_pres
     config.basic.background_type = bg_type.clone();
     save_game_config(app.clone(), game_name, config).map_err(|e| format!("Failed to save config: {}", e))?;
     
+    Ok(())
+}
+
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInfo {
+    pub version: String,
+    pub description: String,
+    pub download_url: String,
+}
+
+#[tauri::command]
+pub async fn get_3dmigoto_latest_release(game_preset: String) -> Result<UpdateInfo, String> {
+    let repo = match game_preset.as_str() {
+        "GIMI" => "SilentNightSound/GIMI-Package",
+        "HIMI" => "leotorrez/HIMI-Package",
+        "SRMI" => "SpectrumQT/SRMI-Package",
+        "ZZMI" => "leotorrez/ZZMI-Package",
+        "WWMI" => "SpectrumQT/WWMI-Package",
+        "EFMI" => "SpectrumQT/EFMI-Package",
+        "AEMI" => "StarBobis/MinBase-Package",
+        _ => return Err("Unsupported game preset for package update".to_string()),
+    };
+
+    let app_config = AppConfig::load().map_err(|e| e.to_string())?;
+    let client = reqwest::Client::new();
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(reqwest::header::USER_AGENT, reqwest::header::HeaderValue::from_static("ssmt4-app"));
+    
+    if !app_config.github_token.is_empty() {
+        let auth_value = format!("Bearer {}", app_config.github_token);
+        let mut auth_header = reqwest::header::HeaderValue::from_str(&auth_value).map_err(|e| format!("Invalid token: {}", e))?;
+        auth_header.set_sensitive(true);
+        headers.insert(reqwest::header::AUTHORIZATION, auth_header);
+    }
+
+    let url = format!("https://api.github.com/repos/{}/releases/latest", repo);
+    
+    let resp = client.get(&url)
+        .headers(headers)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+        
+    if !resp.status().is_success() {
+        return Err(format!("GitHub API Error: {} - {}", resp.status(), resp.text().await.unwrap_or_default()));
+    }
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Failed to parse JSON: {}", e))?;
+    
+    let tag_name = json.get("tag_name").and_then(|v| v.as_str()).ok_or("No tag_name found")?.to_string();
+    let body = json.get("body").and_then(|v| v.as_str()).unwrap_or("No description").to_string();
+    
+    // Find asset
+    let assets = json.get("assets").and_then(|v| v.as_array()).ok_or("No assets found")?;
+    if assets.is_empty() {
+        return Err("Release has no assets".to_string());
+    }
+    
+    // Prefer zip
+    let asset = assets.iter().find(|a| {
+        a.get("name").and_then(|n| n.as_str()).map(|n| n.ends_with(".zip")).unwrap_or(false)
+    }).or(assets.get(0)).ok_or("No suitable asset found")?;
+    
+    let download_url = asset.get("browser_download_url").and_then(|v| v.as_str()).ok_or("No download URL found")?.to_string();
+    
+    Ok(UpdateInfo {
+        version: tag_name,
+        description: body,
+        download_url,
+    })
+}
+
+#[tauri::command]
+pub async fn install_3dmigoto_update(app: AppHandle, game_name: String, download_url: String) -> Result<(), String> {
+    println!("[Update] Starting update for game: {}", game_name);
+    
+    // 1. Determine Target Directory
+    let game_config = load_game_config(app.clone(), game_name.clone())?;
+    
+    let target_dir: PathBuf = if let Some(dir) = game_config.three_d_migoto.get("installDir").and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
+        PathBuf::from(dir)
+    } else {
+        println!("[Update] installDir not set in config, trying cache fallback...");
+        // Fallback to cache dir
+        let app_config = AppConfig::load().map_err(|e| e.to_string())?;
+        if !app_config.cache_dir.is_empty() {
+             PathBuf::from(&app_config.cache_dir).join("3Dmigoto").join(&game_name)
+        } else {
+            return Err("Cannot update: 3Dmigoto installation directory is not set, and no Cache Directory configured.".to_string());
+        }
+    };
+
+    println!("[Update] Target directory detected: {:?}", target_dir);
+
+    // Create target dir if not exists (especially for cache fallback)
+    if !target_dir.exists() {
+        println!("[Update] Creating target directory: {:?}", target_dir);
+        fs::create_dir_all(&target_dir).map_err(|e| format!("Failed to create target directory: {}", e))?;
+    }
+    
+    println!("[Update] Downloading update from: {}", download_url);
+    
+    let client = reqwest::Client::new();
+    let download_resp = client.get(&download_url).send().await.map_err(|e| format!("Download failed: {}", e))?;
+    let bytes = download_resp.bytes().await.map_err(|e| format!("Failed to get bytes: {}", e))?;
+    println!("[Update] Download complete. Size: {} bytes", bytes.len());
+    
+    // Unzip
+    let reader = Cursor::new(bytes);
+    let mut archive = zip::ZipArchive::new(reader).map_err(|e| format!("Failed to read zip: {}", e))?;
+    
+    println!("[Update] Extracting {} files...", archive.len());
+    
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| format!("Zip error: {}", e))?;
+        
+        // Handle "Check for single top-level folder" logic if needed? 
+        // For now, let's just strip known garbage if any, or just extract flat if needed. 
+        // Actually standard packages usually are:
+        // GIMI-Package/
+        //   d3dx.ini
+        //   ...
+        // OR just flat.
+        
+        let outpath = match file.enclosed_name() {
+             Some(path) => target_dir.join(path),
+             None => continue,
+        };
+
+        println!("[Update] Extracting file: {:?}", outpath);
+
+        if file.name().ends_with('/') {
+            fs::create_dir_all(&outpath).map_err(|e| format!("Failed to create dir: {}", e))?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                if !p.exists() {
+                    fs::create_dir_all(&p).map_err(|e| format!("Failed to create dir: {}", e))?;
+                }
+            }
+            let mut outfile = fs::File::create(&outpath).map_err(|e| format!("Failed to create file: {}", e))?;
+            std::io::copy(&mut file, &mut outfile).map_err(|e| format!("Failed to copy content: {}", e))?;
+        }
+    }
+    
+    println!("[Update] Extraction complete.");
+
     Ok(())
 }

@@ -186,7 +186,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Settings Menu Button -->
-      <el-dropdown trigger="hover" placement="top-end">
+      <el-dropdown trigger="hover" placement="top-end" popper-class="settings-dropdown">
         <div class="settings-btn">
           <div class="menu-lines">
              <div class="line"></div>
@@ -476,5 +476,26 @@ onUnmounted(() => {
 .menu-item:hover {
   background-color: rgba(255, 255, 255, 0.1);
   color: #fff;
+}
+</style>
+
+<style>
+/* Global styles for the settings dropdown */
+.settings-dropdown.el-popper {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.settings-dropdown .el-dropdown-menu {
+  border-radius: 12px !important;
+  padding: 6px !important;
+}
+
+.settings-dropdown .el-dropdown-menu__item {
+  border-radius: 8px !important;
+  margin-bottom: 2px;
+}
+.settings-dropdown .el-dropdown-menu__item:last-child {
+  margin-bottom: 0;
 }
 </style>

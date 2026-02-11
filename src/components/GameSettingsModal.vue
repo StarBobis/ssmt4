@@ -255,6 +255,52 @@ const open3dmigotoDir = async () => {
     }
 };
 
+const packageSupportedPresets = ['GIMI', 'HIMI', 'SRMI', 'ZZMI', 'WWMI', 'EFMI', 'AEMI'];
+const canUpdatePackage = computed(() => packageSupportedPresets.includes(config.basic.gamePreset));
+
+const check3DMigotoPackageUpdate = async () => {
+    // 1. Initial Confirmation
+    const checkConfirm = await ask(
+        `确定要检查 ${config.basic.gamePreset} 的3Dmigoto整合包更新吗？`,
+        { title: '检查更新', kind: 'info' }
+    );
+    if (!checkConfirm) return;
+
+    try {
+        isLoading.value = true;
+        
+        // 2. Fetch Info
+        const info = await invoke<{version: string, description: string, downloadUrl: string}>('get_3dmigoto_latest_release', {
+            gamePreset: config.basic.gamePreset
+        });
+        
+        isLoading.value = false;
+
+        // 3. Show info and ask for second confirmation
+        const updateConfirm = await ask(
+            `发现新版本: ${info.version}\n\n更新内容:\n${info.description}\n\n是否立即更新？(将覆盖当前文件)`,
+            { title: '版本详情', kind: 'info' }
+        );
+        
+        if (!updateConfirm) return;
+        
+        // 4. Perform Update
+        isLoading.value = true;
+        await invoke('install_3dmigoto_update', {
+            gameName: props.gameName,
+            downloadUrl: info.downloadUrl
+        });
+
+        await message(`更新成功！已更新至版本 ${info.version}`, { title: '成功', kind: 'info' });
+
+    } catch (e) {
+        console.error(e);
+        await message(`操作失败: ${e}`, { title: 'Error', kind: 'error' });
+    } finally {
+        isLoading.value = false;
+    }
+};
+
 const pickExe = async (field: 'targetExePath' | 'launcherExePath') => {
     try {
         const selected = await open({
@@ -374,6 +420,12 @@ const close = () => {
   <transition name="modal-fade">
     <div v-if="modelValue" class="settings-overlay">
       <div class="settings-window">
+        <!-- Loading Overlay -->
+        <div v-if="isLoading" class="loading-overlay">
+          <div class="spinner"></div>
+          <div class="loading-text">处理中...</div>
+        </div>
+
         <!-- Sidebar -->
         <div class="settings-sidebar">
           <div class="sidebar-title">游戏设置</div>
@@ -469,6 +521,7 @@ const close = () => {
                 <div class="button-row">
                   <button class="action-btn" @click="pick3dmigotoDir">选择文件夹</button>
                   <button class="action-btn" @click="open3dmigotoDir">打开文件夹</button>
+                  <button v-if="canUpdatePackage" class="action-btn" @click="check3DMigotoPackageUpdate">更新整合包</button>
                 </div>
               </div>
 
@@ -775,5 +828,37 @@ const close = () => {
 .modal-fade-enter-from,
 .modal-fade-leave-to {
   opacity: 0;
+}
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+    border-radius: 12px;
+}
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(255,255,255,0.1);
+    border-top-color: #F7CE46;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 12px;
+}
+.loading-text {
+    color: #F7CE46;
+    font-size: 14px;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 </style>

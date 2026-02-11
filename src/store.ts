@@ -17,6 +17,7 @@ export interface AppSettings {
   contentBlur: number;
   cacheDir: string;
   currentConfigName: string;
+  githubToken: string;
 }
 
 export interface GameInfo {
@@ -40,7 +41,8 @@ const defaultSettings: AppSettings = {
   contentOpacity: 0.2, // Lower default for dark theme transparency
   contentBlur: 3,
   cacheDir: '',
-  currentConfigName: 'Default'
+  currentConfigName: 'Default',
+  githubToken: ''
 }
 
 export const appSettings = reactive<AppSettings>({ ...defaultSettings })

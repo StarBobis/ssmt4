@@ -18,6 +18,8 @@ pub struct AppConfig {
     pub current_config_name: String,
     pub window_width: f64,
     pub window_height: f64,
+    #[serde(default)]
+    pub github_token: String,
 }
 
 impl Default for AppConfig {
@@ -34,6 +36,7 @@ impl Default for AppConfig {
             current_config_name: "Default".to_string(),
             window_width: 1000.0,
             window_height: 600.0,
+            github_token: "".to_string(),
         }
     }
 }
