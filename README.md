@@ -12,3 +12,17 @@ SSMT4使用文档: https://starbobis.github.io/SSMT4-Documents/
 
 https://github.com/user-attachments/assets/ba4b2405-66ae-4a50-b6dd-361d783c755f
 
+
+# 特别感谢
+
+本项目特别感谢：
+
+- 孤军
+- 哈基米德
+- 37
+
+大力赞助的AI Token米 支持！
+
+他们的支持让此项目的开发进度大大加快，特别感谢！
+
+
