@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { appSettings } from '../store'
 import { open } from '@tauri-apps/plugin-dialog';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n()
 
 const selectCacheDir = async () => {
   const selected = await open({
@@ -8,7 +11,7 @@ const selectCacheDir = async () => {
     multiple: false,
     title: '选择 SSMT 缓存文件夹'
   });
-  
+
   if (selected && typeof selected === 'string') {
     appSettings.cacheDir = selected;
   }
@@ -25,6 +28,13 @@ const selectCacheDir = async () => {
         </div>
       </template>
       <el-form label-width="140px">
+        <el-form-item :label="t('settings.language')">
+          <el-select v-model="appSettings.locale" placeholder="Select language" style="width: 200px">
+            <el-option label="English" value="en" />
+            <el-option label="简体中文" value="zhs" />
+            <el-option label="繁體中文" value="zht" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="SSMT缓存文件夹">
           <div style="display: flex; gap: 10px; width: 100%;">
             <el-input v-model="appSettings.cacheDir" placeholder="请选择或输入缓存文件夹路径" />
@@ -32,20 +42,21 @@ const selectCacheDir = async () => {
           </div>
         </el-form-item>
         <el-form-item label="GitHub Token">
-           <el-input v-model="appSettings.githubToken" placeholder="可选: 填写Token可提高API请求限额" type="password" show-password />
+          <el-input v-model="appSettings.githubToken" placeholder="可选: 填写Token可提高API请求限额" type="password"
+            show-password />
         </el-form-item>
       </el-form>
     </el-card>
 
     <br />
-    
+
     <el-card>
       <template #header>
         <div class="card-header">
           <span>外观设置</span>
         </div>
       </template>
-      
+
       <el-form label-width="140px">
         <div class="settings-divider">内容区样式 (Content)</div>
         <el-form-item label="不透明度 (Opacity)">
@@ -96,6 +107,7 @@ const selectCacheDir = async () => {
   font-weight: 600;
   letter-spacing: 0.5px;
 }
+
 .settings-divider::after {
   content: '';
   flex: 1;

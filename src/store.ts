@@ -11,6 +11,8 @@ export enum BGType {
   Video = 'Video'
 }
 
+export type Locale = 'en' | 'zhs' | 'zht';
+
 // Define the shape of our settings
 export interface AppSettings {
   bgType: BGType;
@@ -28,6 +30,7 @@ export interface AppSettings {
   showStickers: boolean;
   showWebsites: boolean;
   showDocuments: boolean;
+  locale: Locale;  // 我新增
 }
 
 export interface GameInfo {
@@ -55,6 +58,7 @@ const defaultSettings: AppSettings = {
   showStickers: false,
   showWebsites: false,
   showDocuments: false,
+  locale: 'en' // 新增
 }
 
 export const appSettings = reactive<AppSettings>({ ...defaultSettings })

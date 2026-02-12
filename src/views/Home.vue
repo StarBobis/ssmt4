@@ -1,26 +1,33 @@
-<script setup lang="ts">
+<script setup lang="ts" >
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { message, confirm } from '@tauri-apps/plugin-dialog'
 // import  nextTick from 'vue'
-import { gamesList, switchToGame, appSettings, loadGames } from '../store' 
+import { gamesList, switchToGame, appSettings, loadGames } from '../store'
 import { invoke } from '@tauri-apps/api/core'
 // import { openPath } from '@tauri-apps/plugin-opener'; // Import openPath
 import { join } from '@tauri-apps/api/path';
 import GameSettingsModal from '../components/GameSettingsModal.vue'
 
+import { useI18n  } from 'vue-i18n';
+
+
+
+const { t } = useI18n()
+
+
 // Computed property to get sidebar games (filtered and reverse order)
 const sidebarGames = computed(() => {
   return gamesList
     .filter(g => g.showSidebar)
-    .reverse(); 
+    .reverse();
 });
 
 const isGameActive = (gameName: string) => {
-    return appSettings.currentConfigName === gameName;
+  return appSettings.currentConfigName === gameName;
 };
 
 const handleGameClick = (game: any) => {
-    switchToGame(game);
+  switchToGame(game);
 }
 
 // Context Menu State
@@ -43,97 +50,97 @@ const closeMenu = () => {
 
 const hideGame = async () => {
   if (!targetGame.value) return;
-  
+
   const gameName = targetGame.value.name;
   const wasActive = isGameActive(gameName);
-  
+
   try {
     await invoke('set_game_visibility', { gameName, visible: false });
     await loadGames();
-    
+
     // If the hidden game was active, switch to the first available game
     if (wasActive && sidebarGames.value.length > 0) {
       switchToGame(sidebarGames.value[0]);
     }
   } catch (err) {
-    console.error('Failed to hide game:', err);
+    console.error(t('home.hidegame.fail'), err);
   }
-  
+
   closeMenu();
 };
 
 const open3dmigotoFolder = async () => {
-    const gameName = appSettings.currentConfigName;
-    if (!gameName || gameName === 'Default') return;
+  const gameName = appSettings.currentConfigName;
+  if (!gameName || gameName === 'Default') return;
 
-    try {
-        // We need to load the config to find the path
-        const data = await invoke<any>('load_game_config', { gameName });
-        let path = data.threeDMigoto?.installDir;
-        
-        // Default Logic (Must match Modal logic)
-        if (!path && appSettings.cacheDir) {
-            path = await join(appSettings.cacheDir, '3Dmigoto', gameName);
-        }
+  try {
+    // We need to load the config to find the path
+    const data = await invoke<any>('load_game_config', { gameName });
+    let path = data.threeDMigoto?.installDir;
 
-        if (path) {
-            await invoke('ensure_directory', { path });
-            await invoke('open_in_explorer', { path });
-        } else {
-            console.warn('No 3Dmigoto path found and no cache dir set.');
-        }
-    } catch (e) {
-        console.error('Failed to open 3Dmigoto folder:', e);
+    // Default Logic (Must match Modal logic)
+    if (!path && appSettings.cacheDir) {
+      path = await join(appSettings.cacheDir, '3Dmigoto', gameName);
     }
+
+    if (path) {
+      await invoke('ensure_directory', { path });
+      await invoke('open_in_explorer', { path });
+    } else {
+      console.warn('No 3Dmigoto path found and no cache dir set.');
+    }
+  } catch (e) {
+    console.error('Failed to open 3Dmigoto folder:', e);
+  }
 };
 
 const openD3dxIni = async () => {
-    const gameName = appSettings.currentConfigName;
-    if (!gameName || gameName === 'Default') return;
+  const gameName = appSettings.currentConfigName;
+  if (!gameName || gameName === 'Default') return;
 
-    try {
-        let path: string | undefined;
-        // Load config to find path
-        const data = await invoke<any>('load_game_config', { gameName });
-        path = data.threeDMigoto?.installDir;
-        
-        // Fallback
-        if (!path && appSettings.cacheDir) {
-            path = await join(appSettings.cacheDir, '3Dmigoto', gameName);
-        }
+  try {
+    let path: string | undefined;
+    // Load config to find path
+    const data = await invoke<any>('load_game_config', { gameName });
+    path = data.threeDMigoto?.installDir;
 
-        if (path) {
-            await invoke('ensure_directory', { path });
-            const iniPath = await join(path, 'd3dx.ini');
-            await invoke('open_in_explorer', { path: iniPath });
-        }
-    } catch (e) {
-        console.error('Failed to open d3dx.ini:', e);
+    // Fallback
+    if (!path && appSettings.cacheDir) {
+      path = await join(appSettings.cacheDir, '3Dmigoto', gameName);
     }
+
+    if (path) {
+      await invoke('ensure_directory', { path });
+      const iniPath = await join(path, 'd3dx.ini');
+      await invoke('open_in_explorer', { path: iniPath });
+    }
+  } catch (e) {
+    console.error('Failed to open d3dx.ini:', e);
+  }
 };
 
 const showSettings = ref(false);
 const settingsModalRef = ref<InstanceType<typeof GameSettingsModal> | null>(null);
 
 const openSettingsAndUpdate = () => {
-    showSettings.value = true;
-    // Wait for modal to mount/open
-    setTimeout(() => {
-        settingsModalRef.value?.runPackageUpdate();
-    }, 100);
+  showSettings.value = true;
+  // Wait for modal to mount/open
+  setTimeout(() => {
+    settingsModalRef.value?.runPackageUpdate();
+  }, 100);
 };
 
 const toggleSymlink = async (enable: boolean) => {
-    const gameName = appSettings.currentConfigName;
-    if (!gameName || gameName === 'Default') return;
+  const gameName = appSettings.currentConfigName;
+  if (!gameName || gameName === 'Default') return;
 
-    try {
-        await invoke('toggle_symlink', { gameName, enable });
-        await message(enable ? 'Symlink 已开启' : 'Symlink 已关闭', { title: '成功', kind: 'info' });
-    } catch (e) {
-        console.error('Failed to toggle symlink:', e);
-        await message(`操作失败: ${e}`, { title: '错误', kind: 'error' });
-    }
+  try {
+    await invoke('toggle_symlink', { gameName, enable });
+    await message(enable ? 'Symlink 已开启' : 'Symlink 已关闭', { title: '成功', kind: 'info' });
+  } catch (e) {
+    console.error('Failed to toggle symlink:', e);
+    await message(`操作失败: ${e}`, { title: '错误', kind: 'error' });
+  }
 };
 
 // Start Game Logic
@@ -141,11 +148,11 @@ const isLaunching = ref(false);
 
 const launchGame = async () => {
   if (isLaunching.value) return;
-  
+
   const gameName = appSettings.currentConfigName;
   if (!gameName || gameName === 'Default') {
-     await message('请先选择一个游戏配置', { title: '提示', kind: 'info' });
-     return;
+    await message('请先选择一个游戏配置', { title: '提示', kind: 'info' });
+    return;
   }
   
   try {
@@ -190,41 +197,22 @@ onUnmounted(() => {
 <template>
   <div class="home-container">
     <div class="sidebar-wrapper">
-        <div class="sidebar-track">
-          <!-- Games Loop -->
-           <el-tooltip
-            v-for="game in sidebarGames"
-            :key="game.name"
-            :content="game.name"
-            placement="right"
-            effect="dark"
-            popper-class="game-tooltip"
-          >
-            <div 
-                class="sidebar-icon" 
-                :class="{ active: isGameActive(game.name) }"
-                @click.stop="handleGameClick(game)"
-                @contextmenu.prevent="handleContextMenu($event, game)"
-            >
-              <img 
-                  :src="game.iconPath" 
-                  :alt="game.name" 
-                  loading="lazy" 
-                  @load="(e) => (e.target as HTMLImageElement).style.opacity = '1'"
-                  @error="(e) => (e.target as HTMLImageElement).style.opacity = '0'"
-              />
-            </div>
-          </el-tooltip>
-        </div>
+      <div class="sidebar-track">
+        <!-- Games Loop -->
+        <el-tooltip v-for="game in sidebarGames" :key="game.name" :content="game.name" placement="right" effect="dark"
+          popper-class="game-tooltip">
+          <div class="sidebar-icon" :class="{ active: isGameActive(game.name) }" @click.stop="handleGameClick(game)"
+            @contextmenu.prevent="handleContextMenu($event, game)">
+            <img :src="game.iconPath" :alt="game.name" loading="lazy"
+              @load="(e) => (e.target as HTMLImageElement).style.opacity = '1'"
+              @error="(e) => (e.target as HTMLImageElement).style.opacity = '0'" />
+          </div>
+        </el-tooltip>
+      </div>
     </div>
 
     <!-- Custom Context Menu -->
-    <div 
-      v-if="showMenu" 
-      class="context-menu" 
-      :style="{ top: menuY + 'px', left: menuX + 'px' }"
-      @click.stop
-    >
+    <div v-if="showMenu" class="context-menu" :style="{ top: menuY + 'px', left: menuX + 'px' }" @click.stop>
       <div class="menu-item" @click="hideGame">
         不显示此游戏
       </div>
@@ -237,11 +225,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Settings Modal -->
-    <GameSettingsModal 
-      ref="settingsModalRef"
-      v-model="showSettings" 
-      :game-name="appSettings.currentConfigName"
-    />
+    <GameSettingsModal ref="settingsModalRef" v-model="showSettings" :game-name="appSettings.currentConfigName" />
 
     <div class="action-bar">
       <!-- Start Game Button -->
@@ -249,16 +233,16 @@ onUnmounted(() => {
         <div class="icon-wrapper">
           <div class="play-triangle"></div>
         </div>
-        <span class="btn-text">开始游戏</span>
+        <span class="btn-text">{{t('home.css.startgame')}}</span>
       </div>
 
       <!-- Settings Menu Button -->
       <el-dropdown trigger="hover" placement="top-end" popper-class="settings-dropdown">
         <div class="settings-btn">
           <div class="menu-lines">
-             <div class="line"></div>
-             <div class="line"></div>
-             <div class="line"></div>
+            <div class="line"></div>
+            <div class="line"></div>
+            <div class="line"></div>
           </div>
         </div>
         <template #dropdown>
@@ -274,7 +258,7 @@ onUnmounted(() => {
         </template>
       </el-dropdown>
     </div>
-      
+
 
 
 
@@ -287,31 +271,36 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   display: flex;
-  flex-direction: row; /* Changed to row for Sidebar + Content */
-  padding: 0; /* Remove padding from container, move to children */
+  flex-direction: row;
+  /* Changed to row for Sidebar + Content */
+  padding: 0;
+  /* Remove padding from container, move to children */
   box-sizing: border-box;
   position: relative;
 }
 
 .sidebar-wrapper {
-    width: 80px;
-    height: 100%;
-    /* Gradient Background: Transparent top to Black bottom */
-    background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.95) 100%);
-    display: flex;
-    flex-direction: column;
-    /* justify-content: flex-end; Removed to allow scrolling with margin-top: auto */
-    padding-bottom: 16px; /* Space from bottom matches side margins */
-    padding-top: 40px; /* Safe area for TitleBar when scrolling */
-    box-sizing: border-box;
-    z-index: 10;
-    
-    overflow-y: auto;
-    overflow-x: hidden;
-    
-    /* Distinct right border */
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5); /* Adds depth shadow to the right */
+  width: 80px;
+  height: 100%;
+  /* Gradient Background: Transparent top to Black bottom */
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.95) 100%);
+  display: flex;
+  flex-direction: column;
+  /* justify-content: flex-end; Removed to allow scrolling with margin-top: auto */
+  padding-bottom: 16px;
+  /* Space from bottom matches side margins */
+  padding-top: 40px;
+  /* Safe area for TitleBar when scrolling */
+  box-sizing: border-box;
+  z-index: 10;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  /* Distinct right border */
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+  /* Adds depth shadow to the right */
 }
 
 /* Hide scrollbar for sidebar */
@@ -321,83 +310,98 @@ onUnmounted(() => {
 }
 
 .sidebar-track {
-    display: flex;
-    flex-direction: column-reverse; /* Stack from bottom to top as requested */
-    gap: 16px;
-    align-items: center;
-    width: 100%;
-    margin-top: auto; /* Push content to bottom when not overflowing */
+  display: flex;
+  flex-direction: column-reverse;
+  /* Stack from bottom to top as requested */
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+  margin-top: auto;
+  /* Push content to bottom when not overflowing */
 }
 
 .sidebar-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    overflow: hidden;
-    cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    background-color: rgba(0,0,0,0.3); /* Placeholder bg */
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  background-color: rgba(0, 0, 0, 0.3);
+  /* Placeholder bg */
 }
 
 .sidebar-icon img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .sidebar-icon:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
 }
 
 /* Crystal/Amber selection effect */
 .sidebar-icon.active {
-    /* 
+  /* 
        Layered Box Shadows to create "Gap + Thick Border" effect
        1. Dark gap (simulating distance from icon)
        2. Thick White Border
        3. Outer Glow
        4. Inner Glow (Crystal effect)
     */
-    box-shadow: 
-        0 0 0 2px rgba(0, 0, 0, 0.6),  /* 2px Distance/Gap */
-        0 0 0 4px #ffffff,            /* 2px Thick White Border (4px total spread - 2px gap) */
-        0 0 20px rgba(255, 255, 255, 0.5), /* Soft ambient glow */
-        inset 0 0 20px rgba(255, 255, 255, 0.5); /* Inner crystal glow */
-        
-    /* Remove physical border or make it subtle inner edge */
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    
-    transform: scale(1.05);
-    z-index: 2; /* Ensure shadow overlaps neighbors if needed */
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.6),
+    /* 2px Distance/Gap */
+    0 0 0 4px #ffffff,
+    /* 2px Thick White Border (4px total spread - 2px gap) */
+    0 0 20px rgba(255, 255, 255, 0.5),
+    /* Soft ambient glow */
+    inset 0 0 20px rgba(255, 255, 255, 0.5);
+  /* Inner crystal glow */
+
+  /* Remove physical border or make it subtle inner edge */
+  border: 1px solid rgba(255, 255, 255, 0.3);
+
+  transform: scale(1.05);
+  z-index: 2;
+  /* Ensure shadow overlaps neighbors if needed */
 }
 
 .content-area {
   flex: 1;
-  display: flex; 
+  display: flex;
   flex-direction: column;
-  padding: 40px; /* Restore padding here */
-  position: relative; 
-  z-index: 1; /* Ensure content sits above shadow */
+  padding: 40px;
+  /* Restore padding here */
+  position: relative;
+  z-index: 1;
+  /* Ensure content sits above shadow */
 }
 
 .action-bar {
   display: flex;
-  height: 60px; /* Tall button strip */
+  height: 60px;
+  /* Tall button strip */
   /* Remove flex-end self align because now it is inside content-area which needs to be carefully managed */
   /* Or actually, keep it but ensure content-area is full height */
-  margin-top: auto; /* Push to bottom */
+  margin-top: auto;
+  /* Push to bottom */
   align-self: flex-end;
-  gap: 10px; /* Space between buttons */
-  
+  gap: 10px;
+  /* Space between buttons */
+
   /* Ensure it doesn't overlap with sidebar if window is small, though structure prevents it */
-  padding-right: 40px; /* Right padding from screen edge */
+  padding-right: 40px;
+  /* Right padding from screen edge */
   padding-bottom: 40px;
 }
 
 /* --- Start Game Button --- */
 .start-game-btn {
-  background-color: #F7CE46; /* Yellow */
+  background-color: #F7CE46;
+  /* Yellow */
   color: #000000;
   display: flex;
   align-items: center;
@@ -405,7 +409,7 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: 'Microsoft YaHei', sans-serif;
-  
+
   /* Full rounded capsule shape */
   border-radius: 30px;
 }
@@ -432,16 +436,19 @@ onUnmounted(() => {
   width: 0;
   height: 0;
   border-style: solid;
-  border-width: 7px 0 7px 11px; /* Pointing right */
-  border-color: transparent transparent transparent #F7CE46; /* Yellow triangle */
-  margin-left: 3px; /* Visual optical adjustment */
+  border-width: 7px 0 7px 11px;
+  /* Pointing right */
+  border-color: transparent transparent transparent #F7CE46;
+  /* Yellow triangle */
+  margin-left: 3px;
+  /* Visual optical adjustment */
   transition: all 0.2s ease;
 }
 
 .start-game-btn.disabled {
-    pointer-events: none;
-    opacity: 0.6;
-    filter: grayscale(0.5);
+  pointer-events: none;
+  opacity: 0.6;
+  filter: grayscale(0.5);
 }
 
 /* Hover Effect: Flip Colors for Start Button */
@@ -475,20 +482,22 @@ onUnmounted(() => {
 }
 
 .settings-btn {
-  width: 60px; /* Square to make it a circle (height is 60px from parent) */
-  background-color: #2D2D2D; /* Dark Gray */
+  width: 60px;
+  /* Square to make it a circle (height is 60px from parent) */
+  background-color: #2D2D2D;
+  /* Dark Gray */
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  
+
   /* Remove default borders/outlines */
   border: none;
   outline: none;
-  
+
   /* Circle shape */
   border-radius: 50%;
-  
+
   transition: background-color 0.2s;
 }
 
@@ -500,7 +509,8 @@ onUnmounted(() => {
 }
 
 .settings-btn:hover {
-  background-color: #2D2D2D; /* Keep background unchanged on hover as requested, or slightly lighter? User said "bg color is gray keep unchanged". Assuming static. */
+  background-color: #2D2D2D;
+  /* Keep background unchanged on hover as requested, or slightly lighter? User said "bg color is gray keep unchanged". Assuming static. */
 }
 
 /* The three horizontal lines icon */
@@ -514,14 +524,16 @@ onUnmounted(() => {
 
 .line {
   height: 3px;
-  background-color: #888888; /* Gray lines */
+  background-color: #888888;
+  /* Gray lines */
   width: 100%;
   border-radius: 2px;
   transition: background-color 0.2s;
 }
 
 .settings-btn:hover .line {
-  background-color: #ffffff; /* White lines on hover */
+  background-color: #ffffff;
+  /* White lines on hover */
 }
 
 /* Context Menu */
@@ -568,6 +580,7 @@ onUnmounted(() => {
   border-radius: 8px !important;
   margin-bottom: 2px;
 }
+
 .settings-dropdown .el-dropdown-menu__item:last-child {
   margin-bottom: 0;
 }

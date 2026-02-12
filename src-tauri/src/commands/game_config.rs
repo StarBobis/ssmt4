@@ -89,7 +89,7 @@ pub fn save_game_config(
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
     fs::write(&config_path, &content).map_err(|e| format!("Failed to write config: {}", e))?;
-    
+
     println!("[GameConfig] Successfully wrote to file: {:?}", config_path);
 
     Ok(())
@@ -267,7 +267,7 @@ pub async fn update_game_background(
             .get("video")
             .and_then(|v| v.get("url"))
             .and_then(|v| v.as_str());
-        
+
         // If video is requested but empty/missing, try fallback or error
         match v_url {
             Some(u) if !u.is_empty() => u,
@@ -279,7 +279,7 @@ pub async fn update_game_background(
             .and_then(|v| v.get("url"))
             .and_then(|v| v.as_str());
 
-         match i_url {
+        match i_url {
             Some(u) if !u.is_empty() => u,
             _ => return Err("Current game preset has no background image available.".to_string()),
         }
@@ -302,8 +302,12 @@ pub async fn update_game_background(
 
     // Determine filename extension from URL or just use strict defaults
     // URL might not have extension if signed? usually it does.
-    let ext = if bg_type == BGType::Video { "mp4" } else { "png" }; // Default fallback
-                                                              // Try to get from url
+    let ext = if bg_type == BGType::Video {
+        "mp4"
+    } else {
+        "png"
+    }; // Default fallback
+       // Try to get from url
     let url_path = std::path::Path::new(target_url);
     let url_ext = url_path.extension().and_then(|s| s.to_str()).unwrap_or(ext);
 

@@ -5,6 +5,9 @@ import { appSettings, BGType } from "./store";
 import TitleBar from "./components/TitleBar.vue";
 import { ElMessage, ElNotification } from "element-plus";
 
+
+
+
 const route = useRoute();
 
 /**
