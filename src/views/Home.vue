@@ -1,6 +1,6 @@
 <script setup lang="ts" >
 import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { message, confirm } from '@tauri-apps/plugin-dialog'
+import { ElMessage, ElMessageBox } from 'element-plus'
 // import  nextTick from 'vue'
 import { gamesList, switchToGame, appSettings, loadGames } from '../store'
 import { invoke } from '@tauri-apps/api/core'
@@ -136,10 +136,10 @@ const toggleSymlink = async (enable: boolean) => {
 
   try {
     await invoke('toggle_symlink', { gameName, enable });
-    await message(enable ? 'Symlink 已开启' : 'Symlink 已关闭', { title: '成功', kind: 'info' });
+    ElMessage.success(enable ? 'Symlink 已开启' : 'Symlink 已关闭');
   } catch (e) {
     console.error('Failed to toggle symlink:', e);
-    await message(`操作失败: ${e}`, { title: '错误', kind: 'error' });
+    ElMessage.error(`操作失败: ${e}`);
   }
 };
 
@@ -151,7 +151,7 @@ const launchGame = async () => {
 
   const gameName = appSettings.currentConfigName;
   if (!gameName || gameName === 'Default') {
-    await message('请先选择一个游戏配置', { title: '提示', kind: 'info' });
+    ElMessage.info('请先选择一个游戏配置');
     return;
   }
   
@@ -159,13 +159,19 @@ const launchGame = async () => {
       // Check 3Dmigoto Integrity
       const safe = await invoke<boolean>('check_3dmigoto_integrity', { gameName: gameName });
       if (!safe) {
-          const yes = await confirm(
-              '当前游戏目录下缺少必要的 3Dmigoto 文件 (d3d11.dll 或 d3dx.ini)。\n\n这可能导致 Mod 无法生效。\n是否现在检查并安装 3Dmigoto 更新？', 
-              { title: '缺少核心组件', kind: 'warning', okLabel: '检查更新', cancelLabel: '取消' }
-          );
-          
-          if (yes) {
-              openSettingsAndUpdate();
+          try {
+            await ElMessageBox.confirm(
+                '当前游戏目录下缺少必要的 3Dmigoto 文件 (d3d11.dll 或 d3dx.ini)。\n\n这可能导致 Mod 无法生效。\n是否现在检查并安装 3Dmigoto 更新？', 
+                '缺少核心组件',
+                { 
+                    confirmButtonText: '检查更新', 
+                    cancelButtonText: '取消', 
+                    type: 'warning' 
+                }
+            );
+            openSettingsAndUpdate();
+          } catch {
+              // Cancelled
           }
           return; // Stop launch
       }
@@ -175,7 +181,7 @@ const launchGame = async () => {
       
   } catch (e: any) {
     console.error('Start Game Error:', e);
-    await message(`启动失败: ${e}`, { title: '错误', kind: 'error' });
+    ElMessageBox.alert(`启动失败: ${e}`, '错误', { type: 'error', confirmButtonText: '确定' });
   } finally {
     if(isLaunching.value) {
         setTimeout(() => {

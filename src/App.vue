@@ -352,4 +352,54 @@ input, textarea {
   filter: blur(10px);
   transform: scale(1.02);
 }
+
+/* Element Plus Global Overrides for Dark/Translucent Theme */
+/* Message Box */
+.el-message-box {
+  background-color: rgba(30, 30, 30, 0.85) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37) !important;
+  --el-message-box-title-color: #fff;
+  --el-message-box-content-color: #ddd;
+}
+.el-message-box__header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.el-message-box__title {
+  color: #fff !important;
+}
+.el-message-box__message {
+  color: #ddd !important;
+}
+.el-message-box__close {
+  color: #aaa !important;
+}
+.el-message-box__close:hover {
+  color: #fff !important;
+}
+
+/* Message Toast */
+.el-message {
+  background-color: rgba(30, 30, 30, 0.9) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+.el-message .el-message__content {
+  color: #eee !important;
+}
+
+/* Notification */
+.el-notification {
+  background-color: rgba(30, 30, 30, 0.9) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+.el-notification__title {
+  color: #fff !important;
+}
+.el-notification__content {
+  color: #ddd !important;
+}
+
 </style>

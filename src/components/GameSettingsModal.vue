@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, reactive, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { ask, open, message } from '@tauri-apps/plugin-dialog';
-// import { openPath } from '@tauri-apps/plugin-opener'; // Updated import
+import { open } from '@tauri-apps/plugin-dialog';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { join } from '@tauri-apps/api/path';
 import { loadGames, appSettings, gamesList, switchToGame } from '../store'; // Need to reload games list to see new configs
 import { useI18n } from 'vue-i18n';
@@ -219,13 +219,7 @@ const autoUpdateBackground = async () => {
       bgType: config.basic.backgroundType
     });
     await loadGames();
-    await message(
-      t('gamesettingsmodal.message.success.backgroundupdated'),
-      {
-        title: t('gamesettingsmodal.message.success.title'),
-        kind: 'info'
-      }
-    );
+    ElMessage.success(t('gamesettingsmodal.message.success.backgroundupdated'));
 
     if (appSettings.currentConfigName === props.gameName) {
       // Force refresh UI if active
@@ -236,13 +230,7 @@ const autoUpdateBackground = async () => {
   } catch (e) {
     console.error(e);
 
-    await message(
-      t('gamesettingsmodal.message.error.updateFailed', { error: e }),
-      {
-        title: t('gamesettingsmodal.message.error.title'),
-        kind: 'error'
-      }
-    );
+    ElMessage.error(t('gamesettingsmodal.message.error.updateFailed', { error: e }));
   } finally {
     isLoading.value = false;
   }
@@ -278,16 +266,21 @@ const canUpdatePackage = computed(() => packageSupportedPresets.includes(config.
 
 const check3DMigotoPackageUpdate = async () => {
   // 1. Initial Confirmation
-  const checkConfirm = await ask(
-    t('gamesettingsmodal.confirm.checkUpdate.message', {
-      gamePreset: config.basic.gamePreset
-    }),
-    {
-      title: t('gamesettingsmodal.confirm.checkUpdate.title'),
-      kind: 'info'
-    }
-  );
-  if (!checkConfirm) return;
+  try {
+    await ElMessageBox.confirm(
+      t('gamesettingsmodal.confirm.checkUpdate.message', {
+        gamePreset: config.basic.gamePreset
+      }),
+      t('gamesettingsmodal.confirm.checkUpdate.title'),
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'info'
+      }
+    );
+  } catch {
+      return; 
+  }
 
   try {
     isLoading.value = true;
@@ -300,18 +293,22 @@ const check3DMigotoPackageUpdate = async () => {
     isLoading.value = false;
 
     // 3. Show info and ask for second confirmation
-    const updateConfirm = await ask(
-      t('gamesettingsmodal.confirm.versionUpdate.message', {
-        version: info.version,
-        description: info.description
-      }),
-      {
-        title: t('gamesettingsmodal.confirm.versionUpdate.title'),
-        kind: 'info'
-      }
-    );
-
-    if (!updateConfirm) return;
+    try {
+        await ElMessageBox.confirm(
+            t('gamesettingsmodal.confirm.versionUpdate.message', {
+                version: info.version,
+                description: info.description
+            }),
+            t('gamesettingsmodal.confirm.versionUpdate.title'),
+            {
+               confirmButtonText: '更新',
+               cancelButtonText: '取消',
+               type: 'info'
+            }
+        );
+    } catch {
+        return;
+    }
 
     // 4. Perform Update
     isLoading.value = true;
@@ -320,25 +317,13 @@ const check3DMigotoPackageUpdate = async () => {
       downloadUrl: info.downloadUrl
     });
 
-    await message(
-      t('gamesettingsmodal.message.success.updatedToVersion', {
+    ElMessage.success(t('gamesettingsmodal.message.success.updatedToVersion', {
         version: info.version
-      }),
-      {
-        title: t('gamesettingsmodal.message.success.title'),
-        kind: 'info'
-      }
-    );
+    }));
 
   } catch (e) {
     console.error(e);
-    await message(
-      t('gamesettingsmodal.message.error.operationFailed', { error: e }),
-      {
-        title: t('gamesettingsmodal.message.error.title'),
-        kind: 'error'
-      }
-    );
+    ElMessage.error(t('gamesettingsmodal.message.error.operationFailed', { error: e }));
   } finally {
     isLoading.value = false;
   }
@@ -404,16 +389,21 @@ const setDefaultDll = async () => {
 const createNewConfig = async () => {
   if (!configName.value) return;
 
-  const yes = await ask(
-    t('gamesettingsmodal.confirm.createConfig.message', { 
-      configName: configName.value 
-    }),
-    {
-      title: t('gamesettingsmodal.confirm.createConfig.title'),
-      kind: 'info',
-    }
-  );
-  if (!yes) return;
+  try {
+    await ElMessageBox.confirm(
+        t('gamesettingsmodal.confirm.createConfig.message', { 
+            configName: configName.value 
+        }),
+        t('gamesettingsmodal.confirm.createConfig.title'),
+        {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            type: 'info'
+        }
+    );
+  } catch {
+      return;
+  }
 
   try {
     isLoading.value = true;
@@ -445,11 +435,19 @@ const createNewConfig = async () => {
 const deleteCurrentConfig = async () => {
   if (!props.gameName) return;
 
-  const yes = await ask(`确定要删除配置 "${props.gameName}" 吗？此操作不可逆。`, {
-    title: '删除确认',
-    kind: 'warning',
-  });
-  if (!yes) return;
+  try {
+     await ElMessageBox.confirm(
+         `确定要删除配置 "${props.gameName}" 吗？此操作不可逆。`, 
+         '删除确认', 
+         {
+            confirmButtonText: '删除',
+            cancelButtonText: '取消',
+            type: 'warning'
+         }
+     );
+  } catch {
+      return;
+  }
 
   try {
     isLoading.value = true;
@@ -494,7 +492,7 @@ defineExpose({
     if (canUpdatePackage.value) {
       check3DMigotoPackageUpdate();
     } else {
-      message('当前预设不支持自动更新整合包', { title: '提示', kind: 'info' });
+      ElMessage.info('当前预设不支持自动更新整合包');
     }
   }
 });

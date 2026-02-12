@@ -1,6 +1,6 @@
 import { reactive, watch, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { message } from '@tauri-apps/plugin-dialog'
+import { ElMessageBox } from 'element-plus'
 import { convertFileSrc } from '@tauri-apps/api/core'
 
 // Global UI State
@@ -69,7 +69,10 @@ async function loadSettings() {
     }, 100);
   } catch (e) {
     console.error('Failed to load settings:', e)
-    await message(`加载设置失败: ${e}`, { title: '错误', kind: 'error' });
+    await ElMessageBox.alert(`加载设置失败: ${e}`, '错误', {
+      confirmButtonText: '确定',
+      type: 'error'
+    });
   }
 }
 
