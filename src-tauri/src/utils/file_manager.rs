@@ -39,6 +39,59 @@ pub fn get_global_games_dir(app: &AppHandle) -> PathBuf {
     target_games_dir
 }
 
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+
+pub fn copy_boot_files(app: &AppHandle, target_dir: &Path) {
+    let resource_dir = match app.path().resource_dir() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Failed to get resource dir: {}", e);
+            return; 
+        }
+    };
+    
+    let files = ["d3d11.dll", "d3dcompiler_47.dll", "Run.exe"];
+    
+    for filename in files {
+        let dest_path = target_dir.join(filename);
+        // Helper to check existence and copy
+        let mut source_to_use = resource_dir.join(filename);
+        
+        if !source_to_use.exists() {
+            // Fallback for dev environment
+            let dev_path = PathBuf::from("resources").join(filename);
+            let dev_path_2 = PathBuf::from("src-tauri/resources").join(filename);
+
+            if dev_path.exists() {
+                source_to_use = dev_path;
+            } else if dev_path_2.exists() {
+                source_to_use = dev_path_2;
+            } else {
+                 let msg = format!("Resource file '{}' not found.", filename);
+                 eprintln!("{}", msg);
+                 app.dialog()
+                    .message(&msg)
+                    .title("Error Missing File")
+                    .kind(MessageDialogKind::Error)
+                    .show(|_| {});
+                 continue;
+            }
+        }
+        
+        if let Err(e) = fs::copy(&source_to_use, &dest_path) {
+             let msg = format!("Failed to copy {}: {}.\nPlease ensure the game is closed.", filename, e);
+             eprintln!("{}", msg);
+             app.dialog()
+                .message(&msg)
+                .title("Copy Failed")
+                .kind(MessageDialogKind::Error)
+                .show(|_| {});
+        } else {
+            println!("Copied {} successfully.", filename);
+        }
+    }
+}
+
 // 辅助：查找打包自带的资源目录
 fn find_source_games_dir(app: &AppHandle) -> Option<PathBuf> {
     if let Ok(resource_dir) = app.path().resource_dir() {

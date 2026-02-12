@@ -551,46 +551,7 @@ pub async fn install_3dmigoto_update(
 
     // Copy Resources
     println!("[Update] Copying essential resources...");
-    let resource_dir = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to resolve resource dir: {}", e))?;
-    println!("[Update] Resource Dir resolved to: {:?}", resource_dir);
-
-    let files_to_copy = ["d3d11.dll", "d3dcompiler_47.dll", "Run.exe"];
-
-    for filename in files_to_copy {
-        let src_path = resource_dir.join(filename);
-        let dest_path = target_dir.join(filename);
-
-        println!("[Update] Copying {} -> {:?}", filename, dest_path);
-
-        // Helper to check existence and copy
-        let mut source_to_use = src_path.clone();
-        if !source_to_use.exists() {
-            // Fallback for dev environment
-            let dev_path = PathBuf::from("resources").join(filename); // Try relative to cwd first? or src-tauri/resources
-            let dev_path_2 = PathBuf::from("src-tauri/resources").join(filename);
-
-            if dev_path.exists() {
-                source_to_use = dev_path;
-            } else if dev_path_2.exists() {
-                source_to_use = dev_path_2;
-            } else {
-                return Err(format!(
-                    "Resource file '{}' not found. Checked: {:?}, {:?}, {:?}",
-                    filename, src_path, dev_path, dev_path_2
-                ));
-            }
-        }
-
-        fs::copy(&source_to_use, &dest_path).map_err(|e| {
-            format!(
-                "Failed to copy {}: {}.\nTip: Is the game or 3Dmigoto running? Please close it.",
-                filename, e
-            )
-        })?;
-    }
+    crate::utils::file_manager::copy_boot_files(&app, &target_dir);
 
     println!("[Update] All steps completed successfully.");
 

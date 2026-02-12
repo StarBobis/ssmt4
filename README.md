@@ -8,9 +8,9 @@
 
 第四代超简单3Dmigoto工具箱(Super Simple Migoto Tools 4th)
 
-![alt text](image.png)
-
 SSMT4使用文档: https://starbobis.github.io/SSMT4-Documents/
+
+![alt text](image.png)
 
 # 特别感谢
 

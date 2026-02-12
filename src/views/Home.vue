@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { message } from '@tauri-apps/plugin-dialog'
 // import  nextTick from 'vue'
 import { gamesList, switchToGame, appSettings, loadGames } from '../store' 
 import { invoke } from '@tauri-apps/api/core'
@@ -122,6 +123,45 @@ const openSettingsAndUpdate = () => {
     }, 100);
 };
 
+const toggleSymlink = async (enable: boolean) => {
+    const gameName = appSettings.currentConfigName;
+    if (!gameName || gameName === 'Default') return;
+
+    try {
+        await invoke('toggle_symlink', { gameName, enable });
+        await message(enable ? 'Symlink 已开启' : 'Symlink 已关闭', { title: '成功', kind: 'info' });
+    } catch (e) {
+        console.error('Failed to toggle symlink:', e);
+        await message(`操作失败: ${e}`, { title: '错误', kind: 'error' });
+    }
+};
+
+// Start Game Logic
+const isLaunching = ref(false);
+
+const launchGame = async () => {
+  if (isLaunching.value) return;
+  
+  const gameName = appSettings.currentConfigName;
+  if (!gameName || gameName === 'Default') {
+     await message('请先选择一个游戏配置', { title: '提示', kind: 'info' });
+     return;
+  }
+  
+  isLaunching.value = true;
+  
+  try {
+    await invoke('start_game', { gameName });
+  } catch (e) {
+    console.error('Start Game Error:', e);
+    await message(`启动失败: ${e}`, { title: '错误', kind: 'error' });
+  } finally {
+    setTimeout(() => {
+        isLaunching.value = false;
+    }, 1500); // 1.5s delay
+  }
+}
+
 onMounted(() => {
   document.addEventListener('click', closeMenu);
 });
@@ -189,7 +229,7 @@ onUnmounted(() => {
 
     <div class="action-bar">
       <!-- Start Game Button -->
-      <div class="start-game-btn">
+      <div class="start-game-btn" @click="launchGame" :class="{ 'disabled': isLaunching }">
         <div class="icon-wrapper">
           <div class="play-triangle"></div>
         </div>
@@ -210,8 +250,8 @@ onUnmounted(() => {
             <el-dropdown-item @click="showSettings = true">游戏设置</el-dropdown-item>
             <el-dropdown-item @click="open3dmigotoFolder">打开3Dmigoto文件夹</el-dropdown-item>
             <el-dropdown-item @click="openD3dxIni">打开d3dx.ini</el-dropdown-item>
-            <el-dropdown-item divided>开启Symlink</el-dropdown-item>
-            <el-dropdown-item>关闭Symlink</el-dropdown-item>
+            <el-dropdown-item divided @click="toggleSymlink(true)">开启Symlink</el-dropdown-item>
+            <el-dropdown-item @click="toggleSymlink(false)">关闭Symlink</el-dropdown-item>
             <el-dropdown-item divided @click="openSettingsAndUpdate">检查3Dmigoto包更新</el-dropdown-item>
 
           </el-dropdown-menu>
@@ -380,6 +420,12 @@ onUnmounted(() => {
   border-color: transparent transparent transparent #F7CE46; /* Yellow triangle */
   margin-left: 3px; /* Visual optical adjustment */
   transition: all 0.2s ease;
+}
+
+.start-game-btn.disabled {
+    pointer-events: none;
+    opacity: 0.6;
+    filter: grayscale(0.5);
 }
 
 /* Hover Effect: Flip Colors for Start Button */
