@@ -1,15 +1,84 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from "vue";
-// import computed from "vue";
+import { onMounted, onUnmounted, provide } from "vue";
 import { useRoute } from "vue-router";
 import { appSettings, BGType } from "./store";
 import TitleBar from "./components/TitleBar.vue";
+import { ElMessage, ElNotification } from "element-plus";
 
 
 
 
 const route = useRoute();
 
+/**
+ * =========================================================================
+ *  Global Notification Entry Point (全局通知中心)
+ * =========================================================================
+ * 
+ * 使用方法 (Using):
+ * -----------------
+ * 1. 在 Vue 组件中 (Setup Script):
+ *    import { inject } from 'vue';
+ *    const notify = inject<any>('notify');
+ *    notify.success('Title', 'Message content');
+ *    // or
+ *    notify.error('Title', 'Error message');
+ * 
+ * 2. 或者直接使用 Element Plus 的 ElNotification / ElMessage 并依赖下方的全局样式修正
+ *    (Or just use standard ElNotification/ElMessage imports, as we fix styles below)
+ * 
+ * 此处我们提供 `notify` 作为统一入口，方便未来可能的替换或扩展。
+ */
+
+const notify = {
+  success: (title: string, message?: string) => {
+    ElNotification({
+      title: title,
+      message: message || '',
+      type: 'success',
+      position: 'top-right',
+      zIndex: 99999 // Ensure on top of TitleBar
+    });
+  },
+  warning: (title: string, message?: string) => {
+    ElNotification({
+      title: title,
+      message: message || '',
+      type: 'warning',
+      position: 'top-right',
+      zIndex: 99999
+    });
+  },
+  info: (title: string, message?: string) => {
+    ElNotification({
+      title: title,
+      message: message || '',
+      type: 'info',
+      position: 'top-right',
+      zIndex: 99999
+    });
+  },
+  error: (title: string, message?: string) => {
+    ElNotification({
+      title: title,
+      message: message || '',
+      type: 'error',
+      position: 'top-right',
+      zIndex: 99999
+    });
+  },
+  // Legacy support for simple message toasts
+  toast: (message: string, type: 'success' | 'warning' | 'info' | 'error' = 'info') => {
+      ElMessage({
+          message,
+          type,
+          zIndex: 99999
+      });
+  }
+};
+
+// Provide notify globally to all child components
+provide('notify', notify);
 // Disable default right-click context menu
 const preventContextMenu = (event: Event) => {
   event.preventDefault();
@@ -58,7 +127,7 @@ onUnmounted(() => {
 
   <!-- Global Mask Layer for Game Library Page -->
   <transition name="fade">
-    <div v-if="route.path === '/games' || route.path === '/settings'" class="global-dim-layer"></div>
+    <div v-if="route.path === '/games' || route.path === '/settings' || route.path === '/mods'" class="global-dim-layer"></div>
   </transition>
 
   <el-config-provider>
@@ -103,6 +172,15 @@ html, body {
 input, textarea {
   user-select: text;
 }
+
+/* 
+  Global Notification/Message Fix 
+  Ensure they sit ABOVE the TitleBar (which likely has z-index ~1000-2000)
+*/
+.el-message, .el-notification, .el-message-box__wrapper {
+  z-index: 99999 !important;
+}
+
 
 #app {
   height: 100%;

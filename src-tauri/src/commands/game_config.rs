@@ -2,9 +2,9 @@ use crate::configs::app_config::AppConfig;
 use crate::{commands::game_scanner::BGType, utils::file_manager::get_global_games_dir};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::{Cursor, Write};
+use std::io::{Cursor};
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]

@@ -24,6 +24,8 @@ pub struct AppConfig {
     
     // Page Visibility Settings
     #[serde(default)]
+    pub show_mods: bool,
+    #[serde(default)]
     pub show_workbench: bool,
     #[serde(default)]
     pub show_stickers: bool,
@@ -47,8 +49,7 @@ impl Default for AppConfig {
             current_config_name: "Default".to_string(),
             window_width: 1000.0,
             window_height: 600.0,
-            github_token: "".to_string(),
-            show_workbench: false,
+            github_token: "".to_string(),            show_mods: true,            show_workbench: false,
             show_stickers: false,
             show_websites: false,
             show_documents: false,

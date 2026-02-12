@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::path::PathBuf;
 use std::process::Command;
 use tauri::AppHandle;
-use sysinfo::{System, ProcessRefreshKind, UpdateKind, RefreshKind};
+use sysinfo::{System, ProcessRefreshKind, UpdateKind};
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -26,6 +26,60 @@ struct ThreeDMigotoConfig {
     extra_dll: Option<String>,
     auto_exit_seconds: Option<i32>,
     use_upx: Option<bool>,
+}
+
+fn resolve_migoto_path(app: &AppHandle, game_name: &str, config: &ThreeDMigotoConfig) -> Result<PathBuf, String> {
+    if let Some(ref p) = config.install_dir {
+        if !p.trim().is_empty() {
+             return Ok(PathBuf::from(p));
+        }
+    }
+    
+    use crate::configs::app_config::AppConfig;
+    let app_config = AppConfig::load().map_err(|e| format!("Failed to load app config: {}", e))?;
+    let cache_dir = PathBuf::from(&app_config.cache_dir);
+    if app_config.cache_dir.is_empty() {
+        return Err("3Dmigoto Path not set and Cache Dir not set.".into());
+    }
+    Ok(cache_dir.join("3Dmigoto").join(game_name))
+}
+
+#[tauri::command]
+pub async fn check_3dmigoto_integrity(app: AppHandle, game_name: String) -> Result<bool, String> {
+    let games_dir = get_global_games_dir(&app);
+    let game_dir = games_dir.join(&game_name);
+    let config_path = game_dir.join("Config.json");
+
+    if !config_path.exists() {
+        return Err(format!("Config file not found: {:?}", config_path));
+    }
+
+    let config_content = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config: {}", e))?;
+    
+    let config_full: GameConfigFull = serde_json::from_str(&config_content)
+        .map_err(|e| format!("Failed to parse config: {}", e))?;
+
+    let migoto_config = config_full.three_d_migoto.unwrap_or(ThreeDMigotoConfig {
+        install_dir: None,
+        target_exe_path: None,
+        launcher_exe_path: None,
+        launch_args: None,
+        use_shell: Some(false),
+        show_error_popup: Some(false),
+        auto_set_analyse_options: Some(false),
+        delay: None,
+        extra_dll: None,
+        auto_exit_seconds: None,
+        use_upx: None,
+    });
+
+    let migoto_path = resolve_migoto_path(&app, &game_name, &migoto_config)?;
+    
+    let d3d11 = migoto_path.join("d3d11.dll");
+    let d3dx = migoto_path.join("d3dx.ini");
+
+    Ok(d3d11.exists() && d3dx.exists())
 }
 
 #[tauri::command]
@@ -61,28 +115,20 @@ pub async fn start_game(app: AppHandle, game_name: String) -> Result<(), String>
         use_upx: None,
     });
 
-    let migoto_path = if let Some(ref p) = migoto_config.install_dir {
-        if p.trim().is_empty() {
-             use crate::configs::app_config::AppConfig;
-             let app_config = AppConfig::load().map_err(|e| format!("Failed to load app config: {}", e))?;
-             let cache_dir = PathBuf::from(&app_config.cache_dir);
-             if app_config.cache_dir.is_empty() {
-                 return Err("3Dmigoto Path not set and Cache Dir not set.".into());
-             }
-             cache_dir.join("3Dmigoto").join(&game_name)
-        } else {
-             PathBuf::from(p)
-        }
-    } else {
-         use crate::configs::app_config::AppConfig;
-         let app_config = AppConfig::load().map_err(|e| format!("Failed to load app config: {}", e))?;
-         let cache_dir = PathBuf::from(&app_config.cache_dir);
-         if app_config.cache_dir.is_empty() {
-             return Err("3Dmigoto Path not set and Cache Dir not set.".into());
-         }
-         cache_dir.join("3Dmigoto").join(&game_name)
-    };
+    let migoto_path = resolve_migoto_path(&app, &game_name, &migoto_config)?;
     
+    // Check if target_exe_path is set and exists
+    let target_exe = migoto_config.target_exe_path.as_deref().unwrap_or("");
+    if target_exe.trim().is_empty() {
+        return Err("游戏进程路径(Target Exe)未配置，请在设置中指定游戏可执行文件。".to_string());
+    }
+
+    // Verify if the executable actually exists
+    let target_path = PathBuf::from(target_exe);
+    if !target_path.exists() {
+        return Err(format!("配置的游戏进程文件不存在: {}\n请检查路径是否正确。", target_exe));
+    }
+
     // Copy essential boot files
     crate::utils::file_manager::copy_boot_files(&app, &migoto_path);
     

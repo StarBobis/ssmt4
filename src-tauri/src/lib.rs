@@ -3,6 +3,7 @@ pub mod utils;
 mod commands; // 引入统一的命令模块
 
 use crate::configs::app_config::AppConfig;
+use std::sync::Mutex;
 use tauri::{Manager, WindowEvent};
 
 // 我们的 run 函数现在主要负责组装（Wiring）
@@ -18,12 +19,22 @@ pub fn run() {
         }))
         .setup(|app| {
             let main_window = app.get_webview_window("main").unwrap();
-            if let Ok(config) = AppConfig::load() {
-                let _ = main_window.set_size(tauri::Size::Logical(tauri::LogicalSize {
-                    width: config.window_width,
-                    height: config.window_height,
-                }));
-            }
+            
+            // 1. 加载配置到内存 (如果失败则使用默认值)
+            let config = AppConfig::load().unwrap_or_default();
+            
+            // 2. 根据配置初始化窗口大小
+            let _ = main_window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+                width: config.window_width,
+                height: config.window_height,
+            }));
+
+            // 3. 将配置包装在 Mutex 中，并托管给 Tauri 全局状态
+            app.manage(Mutex::new(config));
+            
+            // 4. 初始化 ModWatcher 状态
+            app.manage(commands::mod_manager::ModWatcher(Mutex::new(None)));
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -32,17 +43,20 @@ pub fn run() {
                     let scale_factor = window.scale_factor().unwrap_or(1.0);
                     let logical_size = size.to_logical::<f64>(scale_factor);
                     
-                    if let Ok(mut config) = AppConfig::load() {
-                        config.window_width = logical_size.width;
-                        config.window_height = logical_size.height;
-                        let _ = config.save();
-                    }
+                    // 从 State 中获取配置，而不是重新从磁盘加载
+                    let state = window.state::<Mutex<AppConfig>>();
+                    // 直接 unwrap，如果锁损坏(poisoned)，程序 Panic 是合理的安全行为
+                    let mut config = state.lock().unwrap();
+                    config.window_width = logical_size.width;
+                    config.window_height = logical_size.height;
+                    let _ = config.save();
                 }
             }
         })
         // 从各个子模块中注册命令
         .invoke_handler(tauri::generate_handler![
             commands::common::greet,
+            commands::common::get_resource_path,
             commands::common::ensure_directory,
             commands::common::open_in_explorer,
             commands::settings::save_settings,
@@ -60,7 +74,21 @@ pub fn run() {
             commands::game_config::get_3dmigoto_latest_release,
             commands::game_config::install_3dmigoto_update,
             commands::game_launcher::start_game,
-            commands::game_launcher::toggle_symlink
+            commands::game_launcher::check_3dmigoto_integrity,
+            commands::mod_manager::watch_mods,
+            commands::mod_manager::unwatch_mods,
+            commands::game_launcher::toggle_symlink,
+            commands::mod_manager::scan_mods,
+            commands::mod_manager::toggle_mod,
+            commands::mod_manager::open_game_mods_folder,
+            commands::mod_manager::preview_mod_archive,
+            commands::mod_manager::install_mod_archive,
+            commands::mod_manager::create_mod_group,
+            commands::mod_manager::set_mod_group_icon,
+            commands::mod_manager::open_mod_group_folder,
+            commands::mod_manager::rename_mod_group,
+            commands::mod_manager::move_mod_to_group,
+            commands::mod_manager::delete_mod_group
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

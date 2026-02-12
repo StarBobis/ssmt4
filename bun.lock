@@ -1,16 +1,17 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "ssmt4",
       "dependencies": {
+        "7zip-bin": "^5.2.0",
         "@element-plus/icons-vue": "^2.3.2",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-dialog": "^2.6.0",
         "@tauri-apps/plugin-opener": "^2",
         "@tauri-apps/plugin-shell": "^2.3.5",
         "element-plus": "^2.13.2",
+        "unrar-binaries": "^1.1.0",
         "vue": "^3.5.13",
         "vue-i18n": "^11.2.8",
         "vue-router": "^5.0.2",
@@ -27,6 +28,8 @@
     },
   },
   "packages": {
+    "7zip-bin": ["7zip-bin@5.2.0", "", {}, "sha512-ukTPVhqG4jNzMro2qA9HSCSSVJN3aN7tlb+hfqYCt3ER0yWroeA2VR38MNrOHLQ/cVj+DaIMad0kFCtWWowh/A=="],
+
     "@babel/generator": ["@babel/generator@7.29.1", "", { "dependencies": { "@babel/parser": "^7.29.0", "@babel/types": "^7.29.0", "@jridgewell/gen-mapping": "^0.3.12", "@jridgewell/trace-mapping": "^0.3.28", "jsesc": "^3.0.2" } }, "sha512-qsaF+9Qcm2Qv8SRIMMscAvG4O3lJ0F1GuMo5HR/Bp02LopNgnZBC/EkbevHFeGs4ls/oPz9v+Bsmzbkbe+0dUw=="],
 
     "@babel/helper-string-parser": ["@babel/helper-string-parser@7.27.1", "", {}, "sha512-qMlSxKbpRlAridDExk92nSobyDdpPijUq2DW6oDnUqd0iOGxmQjyqhMIihI9+zv4LPyZdRje2cavWPbCbWm3eA=="],
@@ -382,6 +385,8 @@
     "unplugin-utils": ["unplugin-utils@0.3.1", "", { "dependencies": { "pathe": "^2.0.3", "picomatch": "^4.0.3" } }, "sha512-5lWVjgi6vuHhJ526bI4nlCOmkCIF3nnfXkCMDeMJrtdvxTs6ZFCM8oNufGTsDbKv/tJ/xj8RpvXjRuPBZJuJog=="],
 
     "unplugin-vue-components": ["unplugin-vue-components@31.0.0", "", { "dependencies": { "chokidar": "^5.0.0", "local-pkg": "^1.1.2", "magic-string": "^0.30.21", "mlly": "^1.8.0", "obug": "^2.1.1", "picomatch": "^4.0.3", "tinyglobby": "^0.2.15", "unplugin": "^2.3.11", "unplugin-utils": "^0.3.1" }, "peerDependencies": { "@nuxt/kit": "^3.2.2 || ^4.0.0", "vue": "^3.0.0" }, "optionalPeers": ["@nuxt/kit"] }, "sha512-4ULwfTZTLuWJ7+S9P7TrcStYLsSRkk6vy2jt/WTfgUEUb0nW9//xxmrfhyHUEVpZ2UKRRwfRb8Yy15PDbVZf+Q=="],
+
+    "unrar-binaries": ["unrar-binaries@1.1.0", "", { "os": [ "linux", "win32", "darwin", ], "cpu": [ "arm", "x64", "ia32", ] }, "sha512-i/u9/W86xuaIetphR2H7gmYFEPD9WVqn83dY+hkNQ+M5KJaDKA6hKtieSwO+CUelYcYJZLVCjzR2IBZrvPcJ4g=="],
 
     "vite": ["vite@6.4.1", "", { "dependencies": { "esbuild": "^0.25.0", "fdir": "^6.4.4", "picomatch": "^4.0.2", "postcss": "^8.5.3", "rollup": "^4.34.9", "tinyglobby": "^0.2.13" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^18.0.0 || ^20.0.0 || >=22.0.0", "jiti": ">=1.21.0", "less": "*", "lightningcss": "^1.21.0", "sass": "*", "sass-embedded": "*", "stylus": "*", "sugarss": "*", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-+Oxm7q9hDoLMyJOYfUYBuHQo+dkAloi33apOPP56pzj+vsdJDzr+j1NISE5pyaAuKL4A3UD34qd0lx5+kfKp2g=="],
 

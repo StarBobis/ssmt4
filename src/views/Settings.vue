@@ -77,6 +77,9 @@ const selectCacheDir = async () => {
         </div>
       </template>
       <el-form label-width="140px">
+        <el-form-item label="Mod管理页面">
+          <el-switch v-model="appSettings.showMods" />
+        </el-form-item>
         <el-form-item label="工作台页面">
           <el-switch v-model="appSettings.showWorkbench" />
         </el-form-item>
