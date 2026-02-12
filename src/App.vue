@@ -138,7 +138,7 @@ onUnmounted(() => {
       }">
         <div class="content-scroll-wrapper" :class="{ 'no-scroll': route.path === '/' }">
           <router-view v-slot="{ Component }">
-            <transition name="fade" mode="out-in">
+            <transition name="page-blur" mode="out-in">
               <component :is="Component" />
             </transition>
           </router-view>
@@ -335,8 +335,21 @@ input, textarea {
   color: #e0e0e0 !important;
 }
 
-.fade-enter-from,
-.fade-leave-to {
+/* Page Transition Effects */
+.page-blur-enter-active,
+.page-blur-leave-active {
+  transition: opacity 0.2s ease, filter 0.2s ease, transform 0.2s ease;
+}
+
+.page-blur-enter-from {
   opacity: 0;
+  filter: blur(10px);
+  transform: scale(0.98);
+}
+
+.page-blur-leave-to {
+  opacity: 0;
+  filter: blur(10px);
+  transform: scale(1.02);
 }
 </style>

@@ -48,7 +48,11 @@ const toggleGamePage = (e: MouseEvent) => {
             router.push('/');
         }
     } else {
-        router.push('/games');
+        if (route.path === '/settings') {
+            router.replace('/games');
+        } else {
+            router.push('/games');
+        }
     }
 };
 
@@ -61,7 +65,11 @@ const toggleSettingsPage = (e: MouseEvent) => {
             router.push('/');
         }
     } else {
-        router.push('/settings');
+        if (route.path === '/games') {
+             router.replace('/settings');
+        } else {
+             router.push('/settings');
+        }
     }
 };
 
