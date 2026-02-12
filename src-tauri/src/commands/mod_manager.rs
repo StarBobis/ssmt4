@@ -464,6 +464,9 @@ pub fn delete_mod_group(app: AppHandle, game_name: String, group_name: String) -
     // Recycle Bin via PowerShell (Windows only)
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         let path_str = group_dir.to_string_lossy().to_string();
         // Use VisualBasic.FileIO.FileSystem.DeleteDirectory for generic recycled bin deletion
         // Needs absolute path
@@ -481,6 +484,7 @@ pub fn delete_mod_group(app: AppHandle, game_name: String, group_name: String) -
         
         let status = std::process::Command::new("powershell")
             .args(["-NoProfile", "-Command", &ps_script])
+            .creation_flags(CREATE_NO_WINDOW)
             .status()
             .map_err(|e| format!("Failed to run recycle bin command: {}", e))?;
 
@@ -493,6 +497,61 @@ pub fn delete_mod_group(app: AppHandle, game_name: String, group_name: String) -
     {
         // Fallback for non-windows
         fs::remove_dir_all(&group_dir).map_err(|e| e.to_string())?;
+    }
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_mod(app: AppHandle, game_name: String, mod_relative_path: String) -> Result<(), String> {
+    let install_dir = get_game_install_dir(&app, &game_name)?;
+    let mods_dir = install_dir.join("Mods");
+    let target_path = mods_dir.join(&mod_relative_path);
+    
+    if !target_path.exists() {
+        return Err("Mod path does not exist".to_string());
+    }
+    
+    // Recycle Bin via PowerShell (Windows only)
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let path_str = target_path.to_string_lossy().to_string();
+        let abs_path = if target_path.is_absolute() { 
+            path_str 
+        } else {
+             path_str
+        };
+        
+        let is_dir = target_path.is_dir();
+        let method = if is_dir { "DeleteDirectory" } else { "DeleteFile" };
+
+        let ps_script = format!(
+            "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::{}('{}', 'OnlyErrorDialogs', 'SendToRecycleBin')",
+            method,
+            abs_path.replace("'", "''") 
+        );
+        
+        let status = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_script])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .map_err(|e| format!("Failed to run recycle bin command: {}", e))?;
+
+        if !status.success() {
+            return Err("Failed to move to recycle bin".to_string());
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if target_path.is_dir() {
+            fs::remove_dir_all(&target_path).map_err(|e| e.to_string())?;
+        } else {
+            fs::remove_file(&target_path).map_err(|e| e.to_string())?;
+        }
     }
     
     Ok(())

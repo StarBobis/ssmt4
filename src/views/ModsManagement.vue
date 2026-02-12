@@ -188,6 +188,32 @@ const moveModToGroup = async (mod: ModInfo, groupName: string) => {
     }
 };
 
+const deleteMod = async (mod: ModInfo) => {
+    try {
+        await ElMessageBox.confirm(
+            `确定要删除 Mod "${mod.name}" 吗？这会将文件移动到回收站。`,
+            '删除 Mod',
+            {
+                confirmButtonText: '删除',
+                cancelButtonText: '取消',
+                type: 'warning',
+            }
+        )
+        
+        await invoke('delete_mod', {
+            gameName: selectedGame.value,
+            modRelativePath: mod.relativePath
+        });
+        
+        ElMessage.success('Mod 已删除');
+        // fetchMods handled by watcher
+    } catch (e: any) {
+        if (e !== 'cancel') {
+             ElMessage.error(`删除失败: ${e}`);
+        }
+    }
+};
+
 const showGroupContextMenu = (e: MouseEvent, group: string) => {
     if (group === 'All' || group === 'Root') return;
     contextMenu.visible = true;
@@ -1508,6 +1534,11 @@ const getGroupIcon = (groupId: string) => {
                         <span>新建分类...</span>
                     </div>
                 </div>
+            </div>
+            <div class="menu-divider"></div>
+            <div class="menu-item" @click="closeContextMenu(); deleteMod(contextMenu.target)" style="color: #ff4949">
+                <el-icon><Delete /></el-icon>
+                <span>删除</span>
             </div>
         </div>
 

@@ -88,7 +88,8 @@ pub fn run() {
             commands::mod_manager::open_mod_group_folder,
             commands::mod_manager::rename_mod_group,
             commands::mod_manager::move_mod_to_group,
-            commands::mod_manager::delete_mod_group
+            commands::mod_manager::delete_mod_group,
+            commands::mod_manager::delete_mod
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
