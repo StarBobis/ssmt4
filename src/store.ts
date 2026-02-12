@@ -50,6 +50,7 @@ const defaultSettings: AppSettings = {
   cacheDir: '',
   currentConfigName: 'Default',
   githubToken: '',
+  showMods: true,
   showWorkbench: false,
   showStickers: false,
   showWebsites: false,

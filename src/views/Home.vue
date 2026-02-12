@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted, inject } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { message, confirm } from '@tauri-apps/plugin-dialog'
 // import  nextTick from 'vue'
 import { gamesList, switchToGame, appSettings, loadGames } from '../store' 
@@ -7,8 +7,6 @@ import { invoke } from '@tauri-apps/api/core'
 // import { openPath } from '@tauri-apps/plugin-opener'; // Import openPath
 import { join } from '@tauri-apps/api/path';
 import GameSettingsModal from '../components/GameSettingsModal.vue'
-
-const notify = inject<any>('notify');
 
 // Computed property to get sidebar games (filtered and reverse order)
 const sidebarGames = computed(() => {
