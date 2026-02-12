@@ -22,6 +22,14 @@ pub struct ModWatcher(pub Mutex<Option<RecommendedWatcher>>);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct GroupInfo {
+    pub id: String, // Full path like "Ayaka/Outfit1"
+    pub name: String, // Just name "Outfit1"
+    pub icon_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ModInfo {
     pub id: String,         // Base64 encoded path or just relative path
     pub name: String,       // Folder name (without DISABLED_)
@@ -31,6 +39,7 @@ pub struct ModInfo {
     pub preview_images: Vec<String>,
     pub group: String,      // Parent folder name if depth > 1
     pub is_dir: bool,
+    pub last_modified: u64, // Timestamp
 }
 
 #[derive(Deserialize)]
@@ -97,9 +106,10 @@ fn scan_folder(
     current_dir: &Path, 
     results: &mut Vec<ModInfo>, 
     current_group: String,
-    depth: usize
+    depth: usize,
+    groups_found: &mut Vec<GroupInfo>
 ) {
-    if depth > 2 { return; } // Limit depth
+    if depth > 5 { return; } // Limit depth increased for multi-level
 
     if let Ok(entries) = fs::read_dir(current_dir) {
         for entry in entries.flatten() {
@@ -107,29 +117,62 @@ fn scan_folder(
             if path.is_dir() {
                 let dir_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
                 
-                // Check if this is a toggleable mod folder (contains .ini files or just treat all folders as mods?)
-                // For 3DMigoto, usually leaf folders are mods. Groups are folders containing mods.
-                // Heuristic: If it contains .ini files, it's likely a mod.
-                // Or we can just list everything and let user decide?
-                
-                let is_disabled = dir_name.starts_with("DISABLED_");
+                let is_disabled = dir_name.to_uppercase().starts_with("DISABLED");
                 let clean_name = if is_disabled {
-                    dir_name.strip_prefix("DISABLED_").unwrap_or(&dir_name).to_string()
+                    if dir_name.to_uppercase().starts_with("DISABLED_") {
+                        dir_name[9..].to_string()
+                    } else {
+                        dir_name[8..].to_string()
+                    }
                 } else {
                     dir_name.clone()
                 };
 
                 let relative_path = path.strip_prefix(base_mods_dir).unwrap_or(&path).to_string_lossy().to_string();
                 
-                // Look for images in this folder
-                let images = find_preview_images(&path);
-
-                // If this is the "Mods" root, group is empty.
-                // If we are in "Mods/Ayaka", group is "Ayaka".
+                // Determine if this directory is a mod or a category
+                // Logic:
+                // 1. If it contains .ini file -> Definitely a Mod
+                // 2. If it contains subdirectories -> Definitely a Category (recurse)
+                // 3. If it contains only images/files but NO .ini and NO subdirs -> Likely a simple texture mod or empty folder?
+                    // But wait, if we have a category with just an icon and no mods yet? It should catch as category.
                 
-                let is_leaf_mod = !images.is_empty() || fs::read_dir(&path).ok().map(|mut r| r.any(|e| e.ok().map(|i| i.path().extension().map(|x| x == "ini").unwrap_or(false)).unwrap_or(false))).unwrap_or(false);
+
+                // Check for ini files
+                let has_ini = fs::read_dir(&path).ok().map(|mut r| r.any(|e| e.ok().map(|i| i.path().extension().map(|x| x == "ini").unwrap_or(false)).unwrap_or(false))).unwrap_or(false);
+                
+                // Check for subdirectories (ignoring common non-mod folders if necessary, but keep simple for now)
+                let has_subdirs = fs::read_dir(&path).ok().map(|mut r| r.any(|e| e.ok().map(|i| i.path().is_dir()).unwrap_or(false))).unwrap_or(false);
+
+                let images = find_preview_images(&path);
+                
+                // Refined Logic
+                let is_leaf_mod = if has_ini {
+                    true // Always a mod if .ini is present
+                } else if has_subdirs {
+                    false // Force recursion if subdirs exist (treat as category)
+                } else {
+                    // No ini, No subdirs.
+                    // If it has images, it could be a texture mod OR an empty category with just an icon.
+                    // Logic: If the only images are standard icon names, treat as empty category.
+                    let standard_icons = ["folder.jpg", "folder.png", "icon.jpg", "icon.png", "cover.jpg", "cover.png"];
+                    let has_content_images = images.iter().any(|img_path| {
+                        let path = Path::new(img_path);
+                        let name = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+                        !standard_icons.contains(&name.as_str())
+                    });
+                    
+                    has_content_images
+                };
 
                 if is_leaf_mod {
+                     let metadata = path.metadata().ok();
+                     let last_modified = metadata
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                        
                      results.push(ModInfo {
                         id: relative_path.clone(),
                         name: clean_name.clone(),
@@ -139,23 +182,73 @@ fn scan_folder(
                         preview_images: images,
                         group: current_group.clone(),
                         is_dir: true,
+                        last_modified,
                     });
                 } else {
-                    // It might be a group folder (like 'Ayaka')
-                    // If depth is 0, then this folder IS a group name (e.g. "Ayaka").
-                    // If depth > 0, then we are inside a group, so the group name persists.
-                    let next_group = if depth == 0 {
+                    // It is a category folder
+                    let next_group = if current_group == "Root" {
                         clean_name.clone()
                     } else {
-                        current_group.clone()
+                        // Use / as separator for groups
+                        format!("{}/{}", current_group, clean_name)
                     };
+                    
+                    // Look for group icon
+                    let mut icon = None;
+                    if let Ok(g_entries) = fs::read_dir(&path) {
+                        for ge in g_entries.flatten() {
+                            let gp = ge.path();
+                            if gp.is_file() {
+                                let g_name = gp.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+                                if ["folder.jpg", "folder.png", "icon.jpg", "icon.png", "cover.jpg", "cover.png"].contains(&g_name.as_str()) {
+                                    icon = Some(gp.to_string_lossy().to_string());
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    groups_found.push(GroupInfo {
+                         id: next_group.clone(),
+                         name: clean_name.clone(),
+                         icon_path: icon,
+                    });
 
                     // Recurse
-                    scan_folder(base_mods_dir, &path, results, next_group, depth + 1);
+                    scan_folder(base_mods_dir, &path, results, next_group, depth + 1, groups_found);
                 }
             }
         }
     }
+}
+
+#[tauri::command]
+pub async fn set_mod_group_icon(app: AppHandle, game_name: String, group_path: String, icon_path: String) -> Result<(), String> {
+    let install_dir = get_game_install_dir(&app, &game_name)?;
+    let dest_dir = install_dir.join("Mods").join(&group_path);
+
+    if !dest_dir.exists() {
+        return Err("Group directory not found".to_string());
+    }
+
+    let src_path = PathBuf::from(&icon_path);
+    if !src_path.exists() {
+        return Err("Source icon not found".to_string());
+    }
+
+    // Remove existing common icons to avoid confusion
+    let common_names = ["folder.jpg", "folder.png", "icon.jpg", "icon.png", "cover.jpg", "cover.png"];
+    for name in common_names {
+        let p = dest_dir.join(name);
+        if p.exists() {
+            let _ = fs::remove_file(p);
+        }
+    }
+
+    let dest_path = dest_dir.join("icon.png");
+    fs::copy(&src_path, &dest_path).map_err(|e| format!("Failed to copy icon: {}", e))?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -173,7 +266,7 @@ pub async fn open_game_mods_folder(app: AppHandle, game_name: String) -> Result<
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModScanResult {
     pub mods: Vec<ModInfo>,
-    pub groups: Vec<String>,
+    pub groups: Vec<GroupInfo>,
 }
 
 #[tauri::command]
@@ -191,48 +284,19 @@ pub async fn scan_mods(app: AppHandle, game_name: String) -> Result<ModScanResul
     }
 
     let mut mods = Vec::new();
-    let mut groups = std::collections::HashSet::new();
+    let mut groups_list = Vec::new();
 
     // 1. Scan for mods recursively
-    scan_folder(&mods_dir, &mods_dir, &mut mods, "Root".to_string(), 0);
+    scan_folder(&mods_dir, &mods_dir, &mut mods, "Root".to_string(), 0, &mut groups_list);
     
-    // Identify which folders are actually mods at the root level
-    let root_mod_names: std::collections::HashSet<String> = mods.iter()
-        .filter(|m| m.group == "Root")
-        .map(|m| m.name.clone()) // This assumes name == folder name, which is true in our logic
-        .collect();
+    // Sort groups by id
+    groups_list.sort_by(|a, b| a.id.cmp(&b.id));
 
-    // 2. Scan for top-level groups explicitly
-    // This ensures empty groups are included
-    if let Ok(entries) = fs::read_dir(&mods_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                
-                // If this folder is recognized as a mod, do NOT treat it as a group
-                if root_mod_names.contains(&name) {
-                    continue;
-                }
-                
-                groups.insert(name);
-            }
-        }
-    }
+    // Dedup groups (scan_folder might visit same node? No, it's tree traversal, unique nodes)
     
-    // Also add groups found in mods (just in case recursion found something deeper)
-    for m in &mods {
-        if m.group != "Root" {
-            groups.insert(m.group.clone());
-        }
-    }
-
-    let mut group_list: Vec<String> = groups.into_iter().collect();
-    group_list.sort();
-
     Ok(ModScanResult {
         mods,
-        groups: group_list
+        groups: groups_list
     })
 }
 
@@ -255,13 +319,17 @@ pub async fn toggle_mod(app: AppHandle, game_name: String, mod_relative_path: St
     let dirname = current_full_path.file_name().ok_or("Invalid filename")?.to_string_lossy().to_string();
 
     let new_dirname = if enable {
-        if dirname.starts_with("DISABLED_") {
-            dirname.strip_prefix("DISABLED_").unwrap().to_string()
+        if dirname.to_uppercase().starts_with("DISABLED") {
+            if dirname.to_uppercase().starts_with("DISABLED_") {
+                dirname[9..].to_string()
+            } else {
+                dirname[8..].to_string()
+            }
         } else {
             return Ok(dirname); // Already enabled
         }
     } else {
-        if !dirname.starts_with("DISABLED_") {
+        if !dirname.to_uppercase().starts_with("DISABLED") {
             format!("DISABLED_{}", dirname)
         } else {
             return Ok(dirname); // Already disabled

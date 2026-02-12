@@ -37,6 +37,7 @@ declare module 'vue' {
     ElSpace: typeof import('element-plus/es')['ElSpace']
     ElSwitch: typeof import('element-plus/es')['ElSwitch']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    ElTree: typeof import('element-plus/es')['ElTree']
     GamesDrawer: typeof import('./src/components/GamesDrawer.vue')['default']
     GameSettingsModal: typeof import('./src/components/GameSettingsModal.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

@@ -4,7 +4,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { gamesList, appSettings } from '../store';
-import { Folder, Refresh, Picture, Search, Plus, Edit, Delete, FolderAdd, ArrowRight } from '@element-plus/icons-vue';
+import { open } from '@tauri-apps/plugin-dialog';
+import { Folder, Refresh, Picture, Search, Plus, Edit, Delete, FolderAdd, ArrowRight, Sort, Setting } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 interface ModInfo {
@@ -16,6 +17,7 @@ interface ModInfo {
     previewImages: string[];
     group: string;
     isDir: boolean;
+    last_modified: number;
 }
 
 interface ArchivePreview {
@@ -150,12 +152,21 @@ const showModContextMenu = (e: MouseEvent, mod: ModInfo) => {
 };
 
 
+interface GroupInfo {
+    id: string; // Full path
+    name: string; // Display name
+    iconPath?: string;
+}
+
 const loading = ref(false);
 const mods = ref<ModInfo[]>([]);
-const availableGroups = ref<string[]>([]);
+const availableGroups = ref<GroupInfo[]>([]);
 const selectedGame = ref('');
 const searchQuery = ref('');
 const selectedGroup = ref('All');
+// Sorting state
+const sortBy = ref<'name' | 'date' | 'status'>('date');
+const sortOrder = ref<'asc' | 'desc'>('desc');
 
 // Install Dialog State
 const showInstallDialog = ref(false);
@@ -326,7 +337,7 @@ const startWatching = async (gameName: string) => {
 const silentRefresh = async () => {
     if (!selectedGame.value) return;
     try {
-        const result = await invoke('scan_mods', { gameName: selectedGame.value }) as { mods: ModInfo[], groups: string[] };
+        const result = await invoke('scan_mods', { gameName: selectedGame.value }) as { mods: ModInfo[], groups: GroupInfo[] };
         mods.value = result.mods;
         availableGroups.value = result.groups;
     } catch (e) {
@@ -336,7 +347,7 @@ const silentRefresh = async () => {
 
 const refreshMods = async (gameName: string) => {
     try {
-        const result = await invoke('scan_mods', { gameName }) as { mods: ModInfo[], groups: string[] };
+        const result = await invoke('scan_mods', { gameName }) as { mods: ModInfo[], groups: GroupInfo[] };
         mods.value = result.mods;
         availableGroups.value = result.groups;
     } catch (error) {
@@ -393,20 +404,101 @@ const openGameFolder = async () => {
 
 // Computed Properties
 const groups = computed(() => {
-    // Merge explicit groups with groups found in mods
-    const s = new Set<string>();
+    // Map of groupID -> GroupInfo
+    const map = new Map<string, GroupInfo>();
     
-    // Add all explicitly available groups (empty folders)
-    availableGroups.value.forEach(g => s.add(g));
-    
-    // Add all groups attached to mods (just in case they were deeper)
-    mods.value.forEach(m => {
-        if (m.group && m.group !== "Root") s.add(m.group);
+    // Add known groups from backend
+    availableGroups.value.forEach(g => {
+        map.set(g.id, g);
     });
 
-    const list = Array.from(s).sort();
-    return ['All', ...list];
+    // Add implicit groups from mods
+    mods.value.forEach(m => {
+        if (m.group && m.group !== "Root" && !map.has(m.group)) {
+            // Split slash name if we want friendly name for implicit groups
+            // ModInfo.group is the full path ID now
+            const parts = m.group.split('/');
+            const name = parts[parts.length - 1];
+            map.set(m.group, { id: m.group, name: name });
+        }
+    });
+
+    // Sort by ID is usually fine for hierarchy
+    const list = Array.from(map.values()).sort((a, b) => a.id.localeCompare(b.id));
+
+    return [{ id: 'All', name: '全部' }, ...list];
 });
+
+const groupTree = computed(() => {
+    const tree: any[] = [];
+    const nodeMap = new Map<string, any>();
+    
+    // Sort by depth so parents are processed before children
+    const sorted = [...(groups.value || [])]
+        .filter(g => g.id !== 'All' && g.id !== 'Root')
+        .sort((a, b) => a.id.split('/').length - b.id.split('/').length);
+
+    sorted.forEach(g => {
+        const parts = g.id.split('/');
+        const name = parts[parts.length - 1]; // Use last part as label
+        
+        const node = {
+            id: g.id,
+            label: name, // Just the folder name, not full path
+            children: [],
+            icon: g.iconPath,
+            // Count includes mods directly in this group
+            // If we want recursive count, we can do post-order traversal later
+            count: mods.value.filter(m => m.group === g.id).length
+        };
+        
+        nodeMap.set(g.id, node);
+
+        if (parts.length === 1) {
+            tree.push(node);
+        } else {
+            const parentId = parts.slice(0, -1).join('/');
+            const parent = nodeMap.get(parentId);
+            if (parent) {
+                parent.children.push(node);
+            } else {
+                // Should not happen if sorted by depth and parents exist
+                // Fallback: add to root
+                tree.push(node);
+            }
+        }
+    });
+    
+    return tree;
+});
+
+const setGroupIcon = async (groupPath: string) => {
+     try {
+        const selected = await open({
+            multiple: false,
+            filters: [{
+                name: 'Image',
+                extensions: ['png', 'jpg', 'jpeg', 'bmp', 'webp']
+            }]
+        });
+
+        if (selected) {
+            await invoke('set_mod_group_icon', {
+                gameName: selectedGame.value,
+                groupPath: groupPath,
+                iconPath: selected
+            });
+            ElMessage.success('图标设置成功');
+            // Little hack to refresh image cache? 
+            // Usually fetchMods -> rescans -> returns new icon list. 
+            // Browser might cache image. convertFileSrc usually handles it? 
+            // Sometimes need timestamp query.
+            await fetchMods();
+        }
+    } catch (e: any) {
+        ElMessage.error('设置图标失败: ' + e);
+    }
+};
 
 const filteredMods = computed(() => {
     let result = mods.value;
@@ -420,12 +512,45 @@ const filteredMods = computed(() => {
         result = result.filter(m => m.name.toLowerCase().includes(query));
     }
 
-    // Sort by enabled first, then name
     return result.sort((a, b) => {
-        if (a.enabled === b.enabled) {
-            return a.name.localeCompare(b.name);
+        let cmp = 0;
+        switch (sortBy.value) {
+            case 'name':
+                cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+                break;
+            case 'date':
+                cmp = (a.last_modified || 0) - (b.last_modified || 0);
+                if (cmp === 0) {
+                     // Secondary sort by name if date is same
+                     cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+                }
+                break;
+            case 'status':
+                // Enabled first (true > false)
+                // Strict: Enabled always > Disabled regarding value
+                const valA = a.enabled ? 1 : 0;
+                const valB = b.enabled ? 1 : 0;
+                cmp = valA - valB;
+                 
+                // If sorting by status, we usually want ENABLED at Top.
+                // If sortOrder is 'desc' (default), 1 - 0 = positive -> 1 is "larger" -> if desc, larger comes first.
+                // So (1, 0) -> [1, 0]. Correct (Enabled Top).
+                // If asc, [0, 1] -> Disabled Top.
+                // User wants "Disabled at bottom", which implies Enabled at Top.
+                // If sort order is DESC, then it works.
+                // But what if same status? Sort by name secondary
+                if (cmp === 0) {
+                    // Secondary deterministic name
+                     let nameCmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+                     // Name sort should usually be ASC even if main sort is DESC?
+                     // If we return nameCmp here directly, it will be flipped by the final return
+                     // so we must account for sortOrder being flipped later
+                     if (sortOrder.value === 'desc') nameCmp = -nameCmp; // negate to counteract final flip
+                     cmp = nameCmp;
+                }
+                break;
         }
-        return a.enabled ? -1 : 1;
+        return sortOrder.value === 'asc' ? cmp : -cmp;
     });
 });
 
@@ -434,6 +559,14 @@ const getPreviewUrl = (mod: ModInfo) => {
         return convertFileSrc(mod.previewImages[0]);
     }
     return ''; // Placeholder handled by UI
+};
+
+const getGroupIcon = (groupId: string) => {
+    if(!groupId || groupId === 'Root') return null;
+    const group = availableGroups.value.find(g => g.id === groupId);
+    // Loop through implicit groups if not found? 
+    // availableGroups usually contains all groups found by scanner.
+    return group?.iconPath;
 };
 
 </script>
@@ -453,7 +586,25 @@ const getPreviewUrl = (mod: ModInfo) => {
         </div>
 
         <div class="right-tools">
-            <el-button @click="openGameFolder" :icon="Folder" plain>打开 Mods 目录</el-button>
+            <el-dropdown trigger="click" @command="(cmd: any) => { 
+                if(cmd.startsWith('order:')) sortOrder = cmd.split(':')[1];
+                else sortBy = cmd;
+            }">
+                <el-button :icon="Sort" plain>
+                    排序: {{ sortBy === 'name' ? '名称' : (sortBy === 'date' ? '日期' : '状态') }}
+                </el-button>
+                <template #dropdown>
+                    <el-dropdown-menu>
+                        <el-dropdown-item command="date">按修改日期</el-dropdown-item>
+                        <el-dropdown-item command="name">按名称</el-dropdown-item>
+                        <el-dropdown-item command="status">按状态</el-dropdown-item>
+                        <el-dropdown-item divided command="order:asc">升序 (Oldest/A-Z)</el-dropdown-item>
+                        <el-dropdown-item command="order:desc">降序 (Newest/Z-A)</el-dropdown-item>
+                    </el-dropdown-menu>
+                </template>
+            </el-dropdown>
+            <div class="divider-vertical"></div>
+            <el-button @click="openGameFolder" :icon="Folder" plain>文件夹</el-button>
             <el-button @click="fetchMods" :icon="Refresh" :loading="loading" circle type="primary" plain></el-button>
         </div>
     </div>
@@ -471,6 +622,7 @@ const getPreviewUrl = (mod: ModInfo) => {
                     :class="{ active: selectedGroup === 'All' }"
                     @click="selectedGroup = 'All'"
                 >
+                    <el-icon class="tree-icon-placeholder"><Folder /></el-icon>
                     <span>全部</span>
                     <span class="count">{{ mods.length }}</span>
                 </div>
@@ -481,21 +633,36 @@ const getPreviewUrl = (mod: ModInfo) => {
                      @click="selectedGroup = 'Root'"
                      v-if="mods.some(m => m.group === 'Root')"
                 >
+                    <el-icon class="tree-icon-placeholder"><Folder /></el-icon>
                     <span>未分类 (Root)</span>
                     <span class="count">{{ mods.filter(m => m.group === 'Root').length }}</span>
                 </div>
                 
-                <div 
-                    v-for="group in groups.filter(g => g !== 'All' && g !== 'Root')" 
-                    :key="group"
-                    class="group-item"
-                    :class="{ active: selectedGroup === group }"
-                    @click="selectedGroup = group"
-                    @contextmenu.prevent.stop="showGroupContextMenu($event, group)"
+                <el-tree
+                    v-if="groupTree.length > 0"
+                    :data="groupTree"
+                    node-key="id"
+                    :props="{ label: 'label', children: 'children' }"
+                    :expand-on-click-node="false"
+                    :current-node-key="selectedGroup"
+                    default-expand-all
+                    highlight-current
+                    @node-click="(data) => selectedGroup = data.id"
+                    class="group-tree"
                 >
-                    <span class="group-name">{{ group }}</span>
-                    <span class="count">{{ mods.filter(m => m.group === group).length }}</span>
-                </div>
+                    <template #default="{ node, data }">
+                        <div class="custom-tree-node"
+                             @contextmenu.prevent.stop="showGroupContextMenu($event, data.id)"
+                        >
+                            <div class="node-content">
+                                <img v-if="data.icon" :src="convertFileSrc(data.icon)" class="tree-icon" />
+                                <el-icon v-else class="tree-icon-placeholder"><Folder /></el-icon>
+                                <span class="node-label" :title="node.label">{{ node.label }}</span>
+                            </div>
+                            <span class="count" v-if="data.count > 0">{{ data.count }}</span>
+                        </div>
+                    </template>
+                </el-tree>
             </div>
         </div>
 
@@ -544,7 +711,13 @@ const getPreviewUrl = (mod: ModInfo) => {
                         <div class="header-row">
                             <div class="text-content">
                                 <div class="mod-name" :title="mod.name">{{ mod.name }}</div>
-                                <div class="mod-group">{{ mod.group !== 'Root' ? mod.group : '未分类' }}</div>
+                                <div class="mod-group">
+                                    <template v-if="mod.group !== 'Root'">
+                                        <img v-if="getGroupIcon(mod.group)" :src="convertFileSrc(getGroupIcon(mod.group)!)" class="mini-group-icon" />
+                                        <span>{{ mod.group.split('/').pop() }}</span>
+                                    </template>
+                                    <span v-else>未分类</span>
+                                </div>
                             </div>
                             <el-switch 
                                 :model-value="mod.enabled"
@@ -570,8 +743,8 @@ const getPreviewUrl = (mod: ModInfo) => {
             <el-form-item label="分组/角色">
                  <el-autocomplete
                     v-model="installForm.targetGroup"
-                    :fetch-suggestions="(qs, cb) => cb(groups.filter(g => g !== 'All' && g.toLowerCase().includes(qs.toLowerCase())).map(x => ({ value: x })))"
-                    placeholder="输入角色名或 Folder 名"
+                    :fetch-suggestions="(qs, cb) => cb(groups.filter((g: any) => g.id !== 'All' && g.id.toLowerCase().includes(qs.toLowerCase())).map((x: any) => ({ value: x.id })))"
+                    placeholder="输入角色名或路径(如 A/B)"
                     style="width: 100%"
                 >
                     <template #default="{ item }">
@@ -624,12 +797,12 @@ const getPreviewUrl = (mod: ModInfo) => {
                         <span>未分类 (Root)</span>
                     </div>
                     <div 
-                        v-for="group in groups.filter(g => g !== 'All' && g !== 'Root')" 
-                        :key="group"
+                        v-for="group in groups.filter((g: any) => g.id !== 'All' && g.id !== 'Root')" 
+                        :key="group.id"
                         class="menu-item"
-                        @click="moveModToGroup(contextMenu.target, group)"
+                        @click="moveModToGroup(contextMenu.target, group.id)"
                     >
-                        <span>{{ group }}</span>
+                        <span>{{ group.id }}</span>
                     </div>
                     <div class="menu-divider"></div>
                      <div class="menu-item" @click="createNewGroup">
@@ -641,8 +814,12 @@ const getPreviewUrl = (mod: ModInfo) => {
         </div>
 
          <div v-if="contextMenu.type === 'group'" class="menu-content">
-            <div class="menu-header">{{ contextMenu.target }}</div>
+            <div class="menu-header">{{ contextMenu.target.split('/').pop() }}</div>
             <div class="menu-divider"></div>
+            <div class="menu-item" @click="setGroupIcon(contextMenu.target)">
+                <el-icon><Picture /></el-icon>
+                <span>设置图标</span>
+            </div>
             <div class="menu-item" @click="renameGroup(contextMenu.target)">
                 <el-icon><Edit /></el-icon>
                 <span>重命名</span>
@@ -740,6 +917,20 @@ const getPreviewUrl = (mod: ModInfo) => {
     font-weight: 500;
 }
 
+.group-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 6px;
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.icon-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .group-name {
     white-space: nowrap;
     overflow: hidden;
@@ -785,37 +976,48 @@ const getPreviewUrl = (mod: ModInfo) => {
 .mod-card {
     border-radius: 12px;
     overflow: hidden;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     display: flex;
     flex-direction: column;
-    height: 240px;
+    height: 260px;
+    background: rgba(30, 30, 35, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    position: relative;
 }
 
 .mod-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+    transform: translateY(-6px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
     border-color: rgba(255, 255, 255, 0.2);
+    z-index: 2;
 }
 
+/* Disabled State Visuals */
 .mod-card.is-disabled {
-    opacity: 0.7;
-    filter: grayscale(0.8);
+    opacity: 0.85;
 }
-.mod-card.is-disabled:hover {
-    opacity: 1;
-    filter: grayscale(0);
+.mod-card.is-disabled .image-wrapper {
+    filter: grayscale(1) contrast(0.8) brightness(0.8);
+    transition: filter 0.3s;
+}
+.mod-card.is-disabled:hover .image-wrapper {
+    filter: grayscale(0.5);
 }
 
 .card-preview {
     flex: 1;
     position: relative;
-    background: #111;
+    background: #000;
     overflow: hidden;
 }
 
 .image-wrapper {
     width: 100%;
     height: 100%;
+    transition: transform 0.5s ease;
+}
+.mod-card:hover .image-wrapper {
+    transform: scale(1.05);
 }
 
 .image-placeholder {
@@ -824,10 +1026,10 @@ const getPreviewUrl = (mod: ModInfo) => {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #2c3e50, #000000);
-    color: rgba(255, 255, 255, 0.3);
-    font-size: 40px;
-    font-weight: bold;
+    background: linear-gradient(135deg, #1e1e24, #141417);
+    color: rgba(255, 255, 255, 0.2);
+    font-size: 48px;
+    font-weight: 800;
 }
 .preview-info {
     font-size: 13px;
@@ -844,56 +1046,156 @@ const getPreviewUrl = (mod: ModInfo) => {
     text-transform: uppercase;
 }
 
+/* Hover Action Overlay */
 .card-overlay {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.4);
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(2px);
     display: flex;
     align-items: center;
     justify-content: center;
     opacity: 0;
     transition: opacity 0.2s;
 }
-
 .mod-card:hover .card-overlay {
     opacity: 1;
 }
 
+/* Footer Info Area */
 .card-info {
-    padding: 12px;
-    background: rgba(20, 20, 20, 0.9);
+    padding: 12px 14px;
+    background: rgba(18, 18, 20, 0.95);
     border-top: 1px solid rgba(255, 255, 255, 0.05);
-    height: 60px; /* fixed height footer */
+    height: auto;
+    min-height: 64px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .header-row {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 8px;
+    align-items: center;
+    gap: 10px;
 }
 
 .text-content {
     flex: 1;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .mod-name {
     font-weight: 600;
-    color: #e0e0e0;
+    color: #f0f0f0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 14px;
-    margin-bottom: 2px;
+    letter-spacing: 0.3px;
 }
 
 .mod-group {
     font-size: 11px;
+    color: #666;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+/*.mod-group::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #666;
+}*/
+.mini-group-icon {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    object-fit: cover;
+}
+
+/* Active dot color if mod is enabled? Could be cool */
+/*
+.mod-card:not(.is-disabled) .mod-group::before {
+    background-color: #67C23A;
+    box-shadow: 0 0 6px rgba(103, 194, 58, 0.5);
+}
+*/
+
+
+/* Switch styling tweak */
+:deep(.el-switch__core) {
+    background-color: rgba(255,255,255,0.1);
+    border-color: transparent;
+}
+
+/* Tree Styles */
+.group-tree {
+    background: transparent; 
+    color: #cfcfcf;
+}
+:deep(.el-tree-node__content) {
+    height: 36px;
+    border-radius: 4px;
+    margin-bottom: 2px;
+}
+:deep(.el-tree-node__content:hover) {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+}
+:deep(.el-tree--highlight-current .el-tree-node.is-current > .el-tree-node__content) {
+    background-color: rgba(64, 158, 255, 0.15) !important;
+    color: #409eff;
+}
+:deep(.el-tree-node__expand-icon) {
+    color: rgba(255, 255, 255, 0.4);
+}
+:deep(.el-tree-node__expand-icon.is-leaf) {
+    color: transparent;
+}
+
+.custom-tree-node {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding-right: 8px;
+    overflow: hidden;
+}
+
+.node-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+}
+
+.node-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+}
+
+.tree-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.tree-icon-placeholder {
+    font-size: 16px;
     color: #888;
+}
+:deep(.el-switch.is-checked .el-switch__core) {
+    background-color: #67C23A;
 }
 
 /* Context Menu */
