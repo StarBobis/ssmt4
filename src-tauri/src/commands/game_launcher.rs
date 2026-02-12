@@ -29,6 +29,9 @@ struct ThreeDMigotoConfig {
 }
 
 fn resolve_migoto_path(app: &AppHandle, game_name: &str, config: &ThreeDMigotoConfig) -> Result<PathBuf, String> {
+    //告诉编译器，我知道app在这儿，但是暂时用不上，未来可能重构使用到它，所以保留，防止出现黄线
+    let _ = app;
+    
     if let Some(ref p) = config.install_dir {
         if !p.trim().is_empty() {
              return Ok(PathBuf::from(p));
