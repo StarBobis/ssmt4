@@ -6,7 +6,7 @@ import 'element-plus/dist/index.css';
 import 'element-plus/theme-chalk/dark/css-vars.css';
 import { i18n } from "./i18n";
 import { watch } from "vue";
-import { appSettings } from "./store";  // ✅ 导入 appSettings，不是 defaultSettings
+import { appSettings } from "./store";
 
 const app = createApp(App);
 
@@ -19,7 +19,7 @@ app.use(i18n);
 app.mount("#app");
 
 // 1. 初始设置：将 store 中的 locale 应用到 i18n
-i18n.global.locale.value = appSettings.locale || 'en';  // ✅ 使用 appSettings
+i18n.global.locale.value = appSettings.locale || 'zhs';
 
 // 2. 监听 store 中 locale 的变化，实时更新 i18n
 watch(
