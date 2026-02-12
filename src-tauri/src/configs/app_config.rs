@@ -44,7 +44,7 @@ impl Default for AppConfig {
             locale: "zhs".to_string(),
             window_width: 1280.0,
             window_height: 720.0,
-            github_token: "".to_string(),            show_mods: true,            show_websites: true,
+            github_token: "".to_string(),            show_mods: true,            show_websites: false,
             show_documents: true,
         }
     }

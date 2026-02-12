@@ -368,7 +368,18 @@ pub async fn get_3dmigoto_latest_release(game_preset: String) -> Result<UpdateIn
         "ZZMI" => "leotorrez/ZZMI-Package",
         "WWMI" => "SpectrumQT/WWMI-Package",
         "EFMI" => "SpectrumQT/EFMI-Package",
+        "GF2" => "SilentNightSound/GIMI-Package",
+        "IdentityVNeoX2" => "StarBobis/MinBase-Package",
+        "IdentityVNeoX3" => "StarBobis/MinBase-Package",
         "AEMI" => "StarBobis/MinBase-Package",
+        "AILIMIT" => "StarBobis/MinBase-Package",
+        "DOAV" => "StarBobis/MinBase-Package",
+        "MiSide" => "StarBobis/MinBase-Package",
+        "SnowBreak" => "StarBobis/MinBase-Package",
+        "Strinova" => "StarBobis/MinBase-Package",
+        "Nioh2" => "StarBobis/MinBase-Package",
+        "YYSLS" => "StarBobis/MinBase-Package",
+        "WuWa" => "StarBobis/MinBase-Package",
         _ => return Err("Unsupported game preset for package update".to_string()),
     };
 

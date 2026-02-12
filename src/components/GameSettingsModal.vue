@@ -91,7 +91,6 @@ const presetOptions = [
   { label: 'YYSLS', value: 'YYSLS' },
   { label: 'WuWa', value: 'WuWa' },
   { label: 'AEMI', value: 'AEMI' },
-  { label: 'DIY', value: 'DIY' },
 ];
 
 // Load/Save Logic
