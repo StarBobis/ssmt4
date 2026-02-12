@@ -5,7 +5,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { gamesList, appSettings } from '../store';
 import { open } from '@tauri-apps/plugin-dialog';
-import { Folder, Refresh, Picture, Search, Plus, Edit, Delete, FolderAdd, ArrowRight, Sort } from '@element-plus/icons-vue';
+import { Folder, Refresh, Picture, Search, Plus, Edit, Delete, FolderAdd, ArrowRight } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 interface ModInfo {
@@ -165,8 +165,180 @@ const selectedGame = ref('');
 const searchQuery = ref('');
 const selectedGroup = ref('All');
 // Sorting state
-const sortBy = ref<'name' | 'date' | 'status'>('date');
-const sortOrder = ref<'asc' | 'desc'>('desc');
+const GROUP_ORDER_KEY = 'ssmt4_group_orders_v1';
+
+const ORDER_STORAGE_KEY = 'ssmt4_mod_manual_orders_v1';
+
+function loadManualOrders() {
+    if (typeof localStorage === 'undefined') {
+        return {} as Record<string, Record<string, string[]>>;
+    }
+    try {
+        const raw = localStorage.getItem(ORDER_STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+                return parsed;
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to load manual orders', e);
+    }
+    return {} as Record<string, Record<string, string[]>>;
+}
+
+const manualOrders = ref<Record<string, Record<string, string[]>>>(loadManualOrders());
+const draggingOrderId = ref<string | null>(null);
+const dragOverId = ref<string | null>(null);
+const manualSortState = reactive({
+    active: false,
+    startX: 0,
+    startY: 0,
+    hasMoved: false,
+    mod: null as ModInfo | null,
+});
+let manualSortGroupHover: HTMLElement | null = null;
+
+// Group manual order state
+const ROOT_PARENT_ID = '__ROOT__';
+
+function loadGroupOrders() {
+    if (typeof localStorage === 'undefined') return {} as Record<string, Record<string, string[]>>;
+    try {
+        const raw = localStorage.getItem(GROUP_ORDER_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') return parsed;
+        }
+    } catch (e) {
+        console.warn('Failed to load group orders', e);
+    }
+    return {} as Record<string, Record<string, string[]>>;
+}
+
+const groupOrders = ref<Record<string, Record<string, string[]>>>(loadGroupOrders());
+const groupDragState = reactive({
+    active: false,
+    startX: 0,
+    startY: 0,
+    hasMoved: false,
+    sourceId: '' as string,
+    targetId: null as string | null,
+    sourceParent: '' as string,
+});
+const groupHoverId = ref<string | null>(null);
+
+const persistManualOrders = () => {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(manualOrders.value));
+    } catch (e) {
+        console.warn('Failed to save manual orders', e);
+    }
+};
+
+const persistGroupOrders = () => {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(GROUP_ORDER_KEY, JSON.stringify(groupOrders.value));
+    } catch (e) {
+        console.warn('Failed to save group orders', e);
+    }
+};
+
+const getGroupParent = (id: string) => {
+    const parts = id.split('/');
+    if (parts.length <= 1) return ROOT_PARENT_ID;
+    return parts.slice(0, -1).join('/');
+};
+
+const sanitizeGroupOrder = (game: string, parentId: string, childrenIds: string[]) => {
+    if (!groupOrders.value[game]) groupOrders.value[game] = {};
+    const existing = groupOrders.value[game][parentId] || [];
+    const valid = new Set(childrenIds);
+    const filtered = existing.filter(id => valid.has(id));
+    const filteredSet = new Set(filtered);
+    const missing = childrenIds.filter(id => !filteredSet.has(id)).sort((a, b) => a.localeCompare(b));
+    const next = [...filtered, ...missing];
+    const changed = existing.length !== next.length || existing.some((id, idx) => id !== next[idx]);
+    if (changed) {
+        groupOrders.value[game][parentId] = next;
+        persistGroupOrders();
+    }
+    return next;
+};
+
+const applyGroupOrder = (parentId: string, nodes: any[]) => {
+    const game = selectedGame.value;
+    if (!game) return nodes;
+    const ids = nodes.map(n => n.id);
+    const orderList = sanitizeGroupOrder(game, parentId, ids);
+    const idxMap = new Map(orderList.map((id, idx) => [id, idx]));
+    return [...nodes].sort((a, b) => {
+        const ia = idxMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+        const ib = idxMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+        return ia - ib;
+    });
+};
+
+const getOrderContext = () => {
+    if (!selectedGame.value) return null;
+    return { game: selectedGame.value, group: selectedGroup.value || 'All' };
+};
+
+const getModsByGroup = (group: string) => {
+    if (group === 'All') return mods.value;
+    if (group === 'Root') return mods.value.filter(m => m.group === 'Root');
+    return mods.value.filter(m => m.group === group);
+};
+
+const compareDefault = (a: ModInfo, b: ModInfo) => {
+    let cmp = (b.last_modified || 0) - (a.last_modified || 0);
+    if (cmp !== 0) return cmp;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+};
+
+const sanitizeOrderForContext = (game: string, group: string) => {
+    const groupMods = getModsByGroup(group);
+    const existing = manualOrders.value[game]?.[group] || [];
+    const validIds = new Set(groupMods.map(m => m.id));
+    const filteredExisting = existing.filter(id => validIds.has(id));
+    const existingSet = new Set(filteredExisting);
+    const missing = groupMods
+        .filter(m => !existingSet.has(m.id))
+        .sort(compareDefault)
+        .map(m => m.id);
+    const next = [...filteredExisting, ...missing];
+    if (!manualOrders.value[game]) manualOrders.value[game] = {};
+    const prev = manualOrders.value[game][group] || [];
+    const changed = prev.length !== next.length || prev.some((id, idx) => id !== next[idx]);
+    if (changed) {
+        manualOrders.value[game][group] = next;
+        persistManualOrders();
+    }
+    return next;
+};
+
+const getCurrentOrderList = () => {
+    const ctx = getOrderContext();
+    if (!ctx) return [] as string[];
+    return sanitizeOrderForContext(ctx.game, ctx.group);
+};
+
+const applyManualReorder = (dragId: string, targetId: string) => {
+    const ctx = getOrderContext();
+    if (!ctx) return;
+    sanitizeOrderForContext(ctx.game, ctx.group);
+    const order = manualOrders.value[ctx.game][ctx.group] || [];
+    const from = order.indexOf(dragId);
+    const to = order.indexOf(targetId);
+    if (from === -1 || to === -1) return;
+    const next = [...order];
+    next.splice(from, 1);
+    next.splice(to, 0, dragId);
+    manualOrders.value[ctx.game][ctx.group] = next;
+    persistManualOrders();
+};
 
 // Install Dialog State
 const showInstallDialog = ref(false);
@@ -213,104 +385,12 @@ const startResize = (e: MouseEvent) => {
 // Native DnD (kept for completeness) + Manual fallback
 const draggingMod = ref<ModInfo | null>(null);
 
-// Manual drag state to bypass WebView native DnD quirks
-const manualDrag = reactive({
-    active: false,
-    startX: 0,
-    startY: 0,
-    hasMoved: false,
-    mod: null as ModInfo | null,
-    lastHoverEl: null as HTMLElement | null,
-});
-
 // Global debug listeners (removed on unmount)
 let globalDragOverLogger: ((e: DragEvent) => void) | null = null;
 let globalDragEnterLogger: ((e: DragEvent) => void) | null = null;
 
-// -------- Manual Drag Fallback (mouse-based) --------
-const clearManualHover = () => {
-    if (manualDrag.lastHoverEl) {
-        manualDrag.lastHoverEl.classList.remove('drag-over');
-        manualDrag.lastHoverEl = null;
-    }
-};
-
-const pickGroupFromPoint = (x: number, y: number): string | null => {
-    const el = document.elementFromPoint(x, y) as HTMLElement | null;
-    const groupEl = el?.closest?.('[data-group-id]') as HTMLElement | null;
-    return groupEl?.dataset.groupId || null;
-};
-
-const onCardMouseDown = (e: MouseEvent, mod: ModInfo) => {
-    if (e.button !== 0) return; // left button only
-    manualDrag.active = true;
-    manualDrag.startX = e.clientX;
-    manualDrag.startY = e.clientY;
-    manualDrag.hasMoved = false;
-    manualDrag.mod = mod;
-    document.addEventListener('mousemove', onCardMouseMove);
-    document.addEventListener('mouseup', onCardMouseUp);
-};
-
-const onCardMouseMove = (e: MouseEvent) => {
-    if (!manualDrag.active) return;
-    const dx = e.clientX - manualDrag.startX;
-    const dy = e.clientY - manualDrag.startY;
-    if (!manualDrag.hasMoved && Math.hypot(dx, dy) > 3) {
-        manualDrag.hasMoved = true;
-        document.body.style.userSelect = 'none';
-        console.log('[ManualDrag] start');
-    }
-
-    if (manualDrag.hasMoved) {
-        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-        const groupEl = el?.closest?.('[data-group-id]') as HTMLElement | null;
-        if (groupEl !== manualDrag.lastHoverEl) {
-            clearManualHover();
-            if (groupEl) {
-                groupEl.classList.add('drag-over');
-                manualDrag.lastHoverEl = groupEl;
-            }
-        }
-    }
-};
-
-const onCardMouseUp = async (e: MouseEvent) => {
-    document.removeEventListener('mousemove', onCardMouseMove);
-    document.removeEventListener('mouseup', onCardMouseUp);
-
-    if (!manualDrag.active) return;
-    const mod = manualDrag.mod;
-    const moved = manualDrag.hasMoved;
-    const targetGroupId = pickGroupFromPoint(e.clientX, e.clientY);
-
-    clearManualHover();
-    manualDrag.active = false;
-    manualDrag.mod = null;
-    manualDrag.hasMoved = false;
-    document.body.style.userSelect = '';
-
-    // Treat as click if not actually dragged
-    if (!moved) return;
-
-    if (!mod || !targetGroupId || targetGroupId === 'All' || mod.group === targetGroupId) return;
-
-    try {
-        await invoke('move_mod_to_group', {
-            gameName: selectedGame.value,
-            modId: mod.id,
-            newGroup: targetGroupId
-        });
-        ElMessage.success({
-            message: `已移动到 ${targetGroupId === 'Root' ? '未分类' : targetGroupId}`,
-            offset: 48 
-        });
-    } catch (e: any) {
-        ElMessage.error({
-            message: `移动失败: ${e}`,
-            offset: 48
-        });
-    }
+const onCardMouseDownWrapper = (e: MouseEvent, mod: ModInfo) => {
+    onManualSortMouseDown(e, mod);
 };
 
 const onDragEnter = (e: DragEvent) => {
@@ -384,6 +464,96 @@ const onDrop = async (e: DragEvent, targetGroupId: string) => {
     } else {
         console.warn('[Drop] No mod captured or ID mismatch', { rawData, dragging: mod?.id });
     }
+};
+
+const clearManualSortHover = () => {
+    dragOverId.value = null;
+};
+
+const onManualSortMouseDown = (e: MouseEvent, mod: ModInfo) => {
+    if (e.button !== 0) return;
+    manualSortState.active = true;
+    manualSortState.startX = e.clientX;
+    manualSortState.startY = e.clientY;
+    manualSortState.hasMoved = false;
+    manualSortState.mod = mod;
+    draggingOrderId.value = mod.id;
+    document.addEventListener('mousemove', onManualSortMouseMove);
+    document.addEventListener('mouseup', onManualSortMouseUp);
+};
+
+const setManualSortGroupHover = (el: HTMLElement | null) => {
+    if (manualSortGroupHover && manualSortGroupHover !== el) {
+        manualSortGroupHover.classList.remove('drag-over');
+    }
+    if (el && manualSortGroupHover !== el) {
+        el.classList.add('drag-over');
+    }
+    manualSortGroupHover = el;
+};
+
+const onManualSortMouseMove = (e: MouseEvent) => {
+    if (!manualSortState.active || !manualSortState.mod) return;
+    const dx = e.clientX - manualSortState.startX;
+    const dy = e.clientY - manualSortState.startY;
+    if (!manualSortState.hasMoved && Math.hypot(dx, dy) > 3) {
+        manualSortState.hasMoved = true;
+        document.body.style.userSelect = 'none';
+    }
+
+    if (manualSortState.hasMoved) {
+        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+        const groupEl = el?.closest?.('[data-group-id]') as HTMLElement | null;
+        if (groupEl) {
+            setManualSortGroupHover(groupEl);
+            dragOverId.value = null; // don't show card hover while over sidebar
+        } else {
+            setManualSortGroupHover(null);
+            const card = el?.closest?.('.mod-card') as HTMLElement | null;
+            const targetId = card?.dataset?.modId || null;
+            dragOverId.value = targetId;
+        }
+    }
+};
+
+function resetManualSortState() {
+    manualSortState.active = false;
+    manualSortState.hasMoved = false;
+    manualSortState.mod = null;
+    draggingOrderId.value = null;
+    dragOverId.value = null;
+    setManualSortGroupHover(null);
+    document.body.style.userSelect = '';
+}
+
+const onManualSortMouseUp = (e: MouseEvent) => {
+    document.removeEventListener('mousemove', onManualSortMouseMove);
+    document.removeEventListener('mouseup', onManualSortMouseUp);
+
+    if (!manualSortState.active || !manualSortState.mod) {
+        resetManualSortState();
+        return;
+    }
+
+    if (manualSortState.hasMoved) {
+        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+        const groupEl = el?.closest?.('[data-group-id]') as HTMLElement | null;
+        const targetGroupId = groupEl?.dataset.groupId;
+
+        if (targetGroupId && targetGroupId !== 'All' && manualSortState.mod.group !== targetGroupId) {
+            moveModToGroup(manualSortState.mod, targetGroupId);
+            resetManualSortState();
+            return;
+        }
+
+        const card = el?.closest?.('.mod-card') as HTMLElement | null;
+        const targetId = card?.dataset?.modId || null;
+        if (targetId && targetId !== manualSortState.mod.id) {
+            applyManualReorder(manualSortState.mod.id, targetId);
+        }
+    }
+
+    resetManualSortState();
 };
 
 // Watcher cleanup
@@ -465,6 +635,26 @@ watch(() => appSettings.currentConfigName, (newVal) => {
     if (newVal && gamesList.find(g => g.name === newVal)) {
         selectedGame.value = newVal;
     }
+}, { immediate: true });
+
+watch([mods, selectedGame, selectedGroup], () => {
+    const ctx = getOrderContext();
+    if (ctx) sanitizeOrderForContext(ctx.game, ctx.group);
+}, { immediate: true });
+
+watch([availableGroups, selectedGame], () => {
+    const game = selectedGame.value;
+    if (!game) return;
+    // Build children map per parent for sanitization
+    const buckets: Record<string, string[]> = {};
+    availableGroups.value.forEach(g => {
+        const parent = getGroupParent(g.id);
+        if (!buckets[parent]) buckets[parent] = [];
+        buckets[parent].push(g.id);
+    });
+    Object.entries(buckets).forEach(([parent, ids]) => {
+        sanitizeGroupOrder(game, parent, ids);
+    });
 }, { immediate: true });
 
 const handleFileDrop = async (path: string) => {
@@ -657,46 +847,45 @@ const groups = computed(() => {
 });
 
 const groupTree = computed(() => {
-    const tree: any[] = [];
     const nodeMap = new Map<string, any>();
-    
-    // Sort by depth so parents are processed before children
+    const buckets: Record<string, any[]> = {};
+
     const sorted = [...(groups.value || [])]
         .filter(g => g.id !== 'All' && g.id !== 'Root')
         .sort((a, b) => a.id.split('/').length - b.id.split('/').length);
 
     sorted.forEach(g => {
         const parts = g.id.split('/');
-        const name = parts[parts.length - 1]; // Use last part as label
-        
+        const name = parts[parts.length - 1];
+        const parentId = getGroupParent(g.id);
+
         const node = {
             id: g.id,
-            label: name, // Just the folder name, not full path
+            label: name,
             children: [],
             icon: g.iconPath,
-            // Count includes mods directly in this group
-            // If we want recursive count, we can do post-order traversal later
             count: mods.value.filter(m => m.group === g.id).length
         };
-        
-        nodeMap.set(g.id, node);
 
-        if (parts.length === 1) {
-            tree.push(node);
-        } else {
-            const parentId = parts.slice(0, -1).join('/');
-            const parent = nodeMap.get(parentId);
-            if (parent) {
-                parent.children.push(node);
-            } else {
-                // Should not happen if sorted by depth and parents exist
-                // Fallback: add to root
-                tree.push(node);
-            }
-        }
+        nodeMap.set(g.id, node);
+        if (!buckets[parentId]) buckets[parentId] = [];
+        buckets[parentId].push(node);
     });
-    
-    return tree;
+
+    // Apply ordering within each sibling bucket
+    Object.keys(buckets).forEach(parentId => {
+        buckets[parentId] = applyGroupOrder(parentId, buckets[parentId]);
+    });
+
+    // Build tree by attaching children to parents
+    Object.entries(buckets).forEach(([parentId, children]) => {
+        if (parentId === ROOT_PARENT_ID) return;
+        const parent = nodeMap.get(parentId);
+        if (parent) parent.children = children;
+    });
+
+    // Root nodes are those under ROOT_PARENT_ID
+    return buckets[ROOT_PARENT_ID] || [];
 });
 
 const setGroupIcon = async (groupPath: string) => {
@@ -727,6 +916,85 @@ const setGroupIcon = async (groupPath: string) => {
     }
 };
 
+const reorderGroup = (sourceId: string, targetId: string) => {
+    const game = selectedGame.value;
+    if (!game) return;
+    if (sourceId === targetId) return;
+    const sourceParent = getGroupParent(sourceId);
+    const targetParent = getGroupParent(targetId);
+    if (sourceParent !== targetParent) return; // forbid cross-level moves
+    const siblings = availableGroups.value
+        .filter(g => getGroupParent(g.id) === sourceParent)
+        .map(g => g.id);
+    sanitizeGroupOrder(game, sourceParent, siblings);
+    const order = groupOrders.value[game][sourceParent] || [];
+    const from = order.indexOf(sourceId);
+    const to = order.indexOf(targetId);
+    if (from === -1 || to === -1) return;
+    const next = [...order];
+    next.splice(from, 1);
+    next.splice(to, 0, sourceId);
+    groupOrders.value[game][sourceParent] = next;
+    persistGroupOrders();
+};
+
+const onGroupMouseDown = (e: MouseEvent, groupId: string) => {
+    if (groupId === 'All' || groupId === 'Root') return;
+    if (e.button !== 0) return;
+    groupDragState.active = true;
+    groupDragState.startX = e.clientX;
+    groupDragState.startY = e.clientY;
+    groupDragState.hasMoved = false;
+    groupDragState.sourceId = groupId;
+    groupDragState.sourceParent = getGroupParent(groupId);
+    groupDragState.targetId = null;
+    document.addEventListener('mousemove', onGroupMouseMove);
+    document.addEventListener('mouseup', onGroupMouseUp);
+};
+
+const onGroupMouseMove = (e: MouseEvent) => {
+    if (!groupDragState.active) return;
+    const dx = e.clientX - groupDragState.startX;
+    const dy = e.clientY - groupDragState.startY;
+    if (!groupDragState.hasMoved && Math.hypot(dx, dy) > 3) {
+        groupDragState.hasMoved = true;
+        document.body.style.userSelect = 'none';
+    }
+    if (groupDragState.hasMoved) {
+        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+        const node = el?.closest?.('[data-group-id]') as HTMLElement | null;
+        const targetId = node?.dataset.groupId || null;
+        const targetParent = node?.dataset.parentId || null;
+        if (targetId && targetParent === groupDragState.sourceParent) {
+            groupHoverId.value = targetId;
+            groupDragState.targetId = targetId;
+        } else {
+            groupHoverId.value = null;
+            groupDragState.targetId = null;
+        }
+    }
+};
+
+const onGroupMouseUp = (e: MouseEvent) => {
+    document.removeEventListener('mousemove', onGroupMouseMove);
+    document.removeEventListener('mouseup', onGroupMouseUp);
+
+    if (groupDragState.hasMoved && groupDragState.targetId) {
+        reorderGroup(groupDragState.sourceId, groupDragState.targetId);
+    }
+    resetGroupDrag();
+};
+
+const resetGroupDrag = () => {
+    groupDragState.active = false;
+    groupDragState.hasMoved = false;
+    groupDragState.sourceId = '';
+    groupDragState.targetId = null;
+    groupDragState.sourceParent = '';
+    groupHoverId.value = null;
+    document.body.style.userSelect = '';
+};
+
 const openModGroupFolder = async (groupPath: string) => {
     try {
         await invoke('open_mod_group_folder', {
@@ -739,7 +1007,7 @@ const openModGroupFolder = async (groupPath: string) => {
 };
 
 const filteredMods = computed(() => {
-    let result = mods.value;
+    let result = [...mods.value];
 
     if (selectedGroup.value !== 'All') {
         result = result.filter(m => m.group === selectedGroup.value);
@@ -750,45 +1018,16 @@ const filteredMods = computed(() => {
         result = result.filter(m => m.name.toLowerCase().includes(query));
     }
 
-    return result.sort((a, b) => {
-        let cmp = 0;
-        switch (sortBy.value) {
-            case 'name':
-                cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-                break;
-            case 'date':
-                cmp = (a.last_modified || 0) - (b.last_modified || 0);
-                if (cmp === 0) {
-                     // Secondary sort by name if date is same
-                     cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-                }
-                break;
-            case 'status':
-                // Enabled first (true > false)
-                // Strict: Enabled always > Disabled regarding value
-                const valA = a.enabled ? 1 : 0;
-                const valB = b.enabled ? 1 : 0;
-                cmp = valA - valB;
-                 
-                // If sorting by status, we usually want ENABLED at Top.
-                // If sortOrder is 'desc' (default), 1 - 0 = positive -> 1 is "larger" -> if desc, larger comes first.
-                // So (1, 0) -> [1, 0]. Correct (Enabled Top).
-                // If asc, [0, 1] -> Disabled Top.
-                // User wants "Disabled at bottom", which implies Enabled at Top.
-                // If sort order is DESC, then it works.
-                // But what if same status? Sort by name secondary
-                if (cmp === 0) {
-                    // Secondary deterministic name
-                     let nameCmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-                     // Name sort should usually be ASC even if main sort is DESC?
-                     // If we return nameCmp here directly, it will be flipped by the final return
-                     // so we must account for sortOrder being flipped later
-                     if (sortOrder.value === 'desc') nameCmp = -nameCmp; // negate to counteract final flip
-                     cmp = nameCmp;
-                }
-                break;
-        }
-        return sortOrder.value === 'asc' ? cmp : -cmp;
+    const orderList = getCurrentOrderList();
+    const orderMap = new Map(orderList.map((id, idx) => [id, idx]));
+
+    return [...result].sort((a, b) => {
+        const ia = orderMap.get(a.id);
+        const ib = orderMap.get(b.id);
+        if (ia !== undefined && ib !== undefined) return ia - ib;
+        if (ia !== undefined) return -1;
+        if (ib !== undefined) return 1;
+        return compareDefault(a, b);
     });
 });
 
@@ -824,24 +1063,6 @@ const getGroupIcon = (groupId: string) => {
         </div>
 
         <div class="right-tools">
-            <el-dropdown trigger="click" @command="(cmd: any) => { 
-                if(cmd.startsWith('order:')) sortOrder = cmd.split(':')[1];
-                else sortBy = cmd;
-            }">
-                <el-button :icon="Sort" plain>
-                    排序: {{ sortBy === 'name' ? '名称' : (sortBy === 'date' ? '日期' : '状态') }}
-                </el-button>
-                <template #dropdown>
-                    <el-dropdown-menu>
-                        <el-dropdown-item command="date">按修改日期</el-dropdown-item>
-                        <el-dropdown-item command="name">按名称</el-dropdown-item>
-                        <el-dropdown-item command="status">按状态</el-dropdown-item>
-                        <el-dropdown-item divided command="order:asc">升序 (Oldest/A-Z)</el-dropdown-item>
-                        <el-dropdown-item command="order:desc">降序 (Newest/Z-A)</el-dropdown-item>
-                    </el-dropdown-menu>
-                </template>
-            </el-dropdown>
-            <div class="divider-vertical"></div>
             <el-button @click="openGameFolder" :icon="Folder" plain>文件夹</el-button>
             <el-button @click="fetchMods" :icon="Refresh" :loading="loading" circle type="primary" plain></el-button>
         </div>
@@ -904,6 +1125,9 @@ const getGroupIcon = (groupId: string) => {
                                     @dragleave.stop="onDragLeave"
                                     @drop.stop.prevent="onDrop($event, data.id)"
                                     :data-group-id="data.id"
+                                    :data-parent-id="getGroupParent(data.id)"
+                                    :class="{ 'reorder-hover': groupHoverId === data.id }"
+                                    @mousedown.stop="onGroupMouseDown($event, data.id)"
                                 >
                             <div class="node-content">
                                 <img v-if="data.icon" :src="convertFileSrc(data.icon)" class="tree-icon" />
@@ -921,6 +1145,9 @@ const getGroupIcon = (groupId: string) => {
 
         <!-- Mod Grid -->
         <div class="mod-grid-container" v-loading="loading">
+            <div class="manual-sort-hint glass-panel">
+                拖拽卡片调整顺序，结果按游戏与分组记忆；也可拖到左侧分类快速归类。
+            </div>
             <div v-if="filteredMods.length === 0" class="empty-state">
                 <el-empty :description="searchQuery ? '没有找到匹配的 Mod' : '这个游戏还没有 Mod，拖拽压缩包到这里安装！'" >
                     <el-button type="primary" plain @click="openGameFolder">打开文件夹</el-button>
@@ -932,10 +1159,11 @@ const getGroupIcon = (groupId: string) => {
                     v-for="mod in filteredMods" 
                     :key="mod.id" 
                     class="mod-card glass-panel"
-                    :class="{ 'is-disabled': !mod.enabled }"
+                    :class="{ 'is-disabled': !mod.enabled, 'reorder-hover': dragOverId === mod.id }"
                     @contextmenu.prevent.stop="showModContextMenu($event, mod)"
-                    draggable="false"  
-                    @mousedown="onCardMouseDown($event, mod)"
+                    :draggable="false"
+                    @mousedown="onCardMouseDownWrapper($event, mod)"
+                    :data-mod-id="mod.id"
                 >
                     <!-- Preview Image -->
                     <div class="card-preview">
@@ -1147,8 +1375,13 @@ const getGroupIcon = (groupId: string) => {
     flex-shrink: 0;
     overflow-y: auto;
     border-right: 1px solid rgba(255, 255, 255, 0.05);
-    background: rgba(20, 20, 25, 0.4); /* Slightly dark */
+    background: rgba(20, 20, 25, 0.25); /* More transparent */
     position: relative; /* For resizer positioning */
+}
+
+.group-list {
+    background: rgba(20, 20, 25, 0.35);
+    border-radius: 8px;
 }
 
 .sidebar-resizer {
@@ -1237,6 +1470,15 @@ const getGroupIcon = (groupId: string) => {
     /* Custom Scrollbar */
 }
 
+.manual-sort-hint {
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #d1e8ff;
+    border: 1px dashed rgba(64, 158, 255, 0.5);
+}
+
 /* Scrollbar styling for webkit */
 .mod-grid-container::-webkit-scrollbar,
 .sidebar::-webkit-scrollbar {
@@ -1271,6 +1513,14 @@ const getGroupIcon = (groupId: string) => {
     user-select: none; /* Prevent text selection during drag */
     cursor: grab; /* Indicate draggable */
     z-index: 1;
+}
+
+.mod-card[draggable="true"] { cursor: move; }
+.mod-card[draggable="false"] { cursor: grab; }
+
+.mod-card.reorder-hover {
+    outline: 2px dashed #409eff;
+    border-color: rgba(64, 158, 255, 0.4);
 }
 
 .mod-card:active {
@@ -1472,6 +1722,12 @@ const getGroupIcon = (groupId: string) => {
     width: 100%;
     padding-right: 8px;
     overflow: hidden;
+}
+
+.custom-tree-node.reorder-hover {
+    background: rgba(64, 158, 255, 0.15);
+    border-radius: 4px;
+    outline: 1px dashed #409eff;
 }
 
 .node-content {
