@@ -382,7 +382,7 @@ pub async fn get_3dmigoto_latest_release(game_preset: String) -> Result<UpdateIn
         "WuWa" => "StarBobis/MinBase-Package",
         _ => return Err("Unsupported game preset for package update".to_string()),
     };
-
+    
     let app_config = AppConfig::load().map_err(|e| e.to_string())?;
     let client = reqwest::Client::new();
     let mut headers = reqwest::header::HeaderMap::new();
