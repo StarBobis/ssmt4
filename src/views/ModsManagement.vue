@@ -5,7 +5,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { gamesList, appSettings } from '../store';
 import { open } from '@tauri-apps/plugin-dialog';
-import { Folder, Refresh, Picture, Search, Plus, Edit, Delete, FolderAdd, ArrowRight } from '@element-plus/icons-vue';
+import { Folder, Refresh, Picture, Search, Plus, Edit, Delete, FolderAdd, ArrowRight, View, Hide, CircleClose } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 interface ModInfo {
@@ -115,6 +115,41 @@ const confirmSubGroup = async () => {
         fetchMods();
     } catch (e: any) {
         ElMessage.error('创建失败: ' + e);
+    }
+};
+
+const toggleGroup = async (group: GroupInfo) => {
+    // Check if parent group is disabled when enabling
+    if (!group.enabled) {
+        const parentId = getGroupParent(group.id);
+        if (parentId && parentId !== 'Root' && parentId !== 'All') {
+            const parentGroup = groups.value.find(g => g.id === parentId);
+            if (parentGroup && !parentGroup.enabled) {
+                ElMessage.warning(`无法启用分类 "${group.name}"，因为父分类 "${parentGroup.name}" 已被禁用`);
+                return;
+            }
+        }
+    }
+
+    try {
+        await invoke('toggle_mod_group', {
+            gameName: selectedGame.value,
+            groupPath: group.path,
+            enable: !group.enabled
+        });
+        
+        // Optimistic update
+        group.enabled = !group.enabled;
+        
+        // And refresh
+         setTimeout(() => {
+            fetchMods();
+        }, 300); // Small delay for file system
+        
+        ElMessage.success(group.enabled ? '分类已启用' : '分类已禁用');
+    } catch (e: any) {
+        ElMessage.error('切换状态失败: ' + e);
+        fetchMods(); // Revert on failure
     }
 };
 
@@ -266,8 +301,8 @@ const deleteMod = async (mod: ModInfo) => {
     }
 };
 
-const showGroupContextMenu = (e: MouseEvent, group: string) => {
-    if (group === 'All' || group === 'Root') return;
+const showGroupContextMenu = (e: MouseEvent, group: any) => {
+    if (group.id === 'All' || group.id === 'Root') return;
     contextMenu.visible = true;
     contextMenu.x = e.clientX;
     contextMenu.y = e.clientY;
@@ -288,6 +323,8 @@ interface GroupInfo {
     id: string; // Full path
     name: string; // Display name
     iconPath?: string;
+    path: string;
+    enabled: boolean;
 }
 
 const loading = ref(false);
@@ -1020,10 +1057,25 @@ const fetchMods = () => {
 };
 
 const toggleMod = async (mod: ModInfo) => {
+    // Check if parent group is disabled when trying to enable
+    const targetState = !mod.enabled;
+    if (targetState) {
+        // Find the group this mod belongs to
+        // Note: mod.group contains the group ID
+        // effectiveGroup check:
+        // Since our data structure might be flat or tree, we need to find if *any* parent group in the chain is disabled?
+        // But for now, let's just check the direct group for simplicity, or look it up in our flatten groups map.
+        
+        // Use the 'groups' computed property which aggregates all groups
+        const parentGroup = groups.value.find(g => g.id === mod.group);
+        if (parentGroup && !parentGroup.enabled) {
+             ElMessage.warning(`无法启用 "${mod.name}"，因为所属分类 "${parentGroup.name}" 已被禁用`);
+             return;
+        }
+    }
+
     // Optimistic UI update is risky here if renaming fails, but let's try
     // Better to wait for server response
-    const originalState = mod.enabled;
-    const targetState = !originalState; // We want to toggle
     
     try {
         await invoke('toggle_mod', { 
@@ -1075,14 +1127,20 @@ const groups = computed(() => {
             // ModInfo.group is the full path ID now
             const parts = m.group.split('/');
             const name = parts[parts.length - 1];
-            map.set(m.group, { id: m.group, name: name });
+            map.set(m.group, { 
+                id: m.group, 
+                name: name,
+                path: m.group, // Fallback path
+                enabled: true, // Fallback enabled state
+                iconPath: undefined
+            });
         }
     });
 
     // Sort by ID is usually fine for hierarchy
     const list = Array.from(map.values()).sort((a, b) => a.id.localeCompare(b.id));
 
-    return [{ id: 'All', name: '全部' }, ...list];
+    return [{ id: 'All', name: '全部', path: '', enabled: true }, ...list];
 });
 
 const groupTree = computed(() => {
@@ -1103,6 +1161,8 @@ const groupTree = computed(() => {
             label: name,
             children: [],
             icon: g.iconPath,
+            path: g.path,
+            enabled: g.enabled,
             count: mods.value.filter(m => m.group === g.id).length
         };
 
@@ -1391,20 +1451,23 @@ const getGroupIcon = (groupId: string) => {
                 >
                     <template #default="{ node, data }">
                                 <div class="custom-tree-node"
-                                    @contextmenu.prevent.stop="showGroupContextMenu($event, data.id)"
+                                    @contextmenu.prevent.stop="showGroupContextMenu($event, data)"
                                     @dragenter.stop.prevent="onDragEnter"
                                     @dragover.stop.prevent="onDragOver"
                                     @dragleave.stop="onDragLeave"
                                     @drop.stop.prevent="onDrop($event, data.id)"
                                     :data-group-id="data.id"
                                     :data-parent-id="getGroupParent(data.id)"
-                                    :class="{ 'reorder-hover': groupHoverId === data.id }"
+                                    :class="{ 'reorder-hover': groupHoverId === data.id, 'is-disabled': !data.enabled }"
                                     @mousedown.stop="onGroupMouseDown($event, data.id)"
                                 >
                             <div class="node-content">
                                 <img v-if="data.icon" :src="convertFileSrc(data.icon)" class="tree-icon" />
                                 <el-icon v-else class="tree-icon-placeholder"><Folder /></el-icon>
                                 <span class="node-label" :title="node.label">{{ node.label }}</span>
+                                <el-tooltip content="该分类已被禁用，其中所有内容都不会生效" placement="right" :show-after="500" v-if="!data.enabled">
+                                     <el-icon class="disabled-icon"><CircleClose /></el-icon>
+                                </el-tooltip>
                             </div>
                             <span class="count" v-if="data.count > 0">{{ data.count }}</span>
                         </div>
@@ -1603,25 +1666,30 @@ const getGroupIcon = (groupId: string) => {
         </div>
 
          <div v-if="contextMenu.type === 'group'" class="menu-content">
-            <div class="menu-header">{{ contextMenu.target.split('/').pop() }}</div>
+            <div class="menu-header">{{ contextMenu.target.name }}</div>
             <div class="menu-divider"></div>
-            <div class="menu-item" @click="closeContextMenu(); openModGroupFolder(contextMenu.target)">
+            <div class="menu-item" @click="closeContextMenu(); toggleGroup(contextMenu.target)">
+                <el-icon v-if="contextMenu.target.enabled"><Hide /></el-icon>
+                <el-icon v-else><View /></el-icon>
+                <span>{{ contextMenu.target.enabled ? '禁用此分类' : '启用此分类' }}</span>
+            </div>
+            <div class="menu-item" @click="closeContextMenu(); openModGroupFolder(contextMenu.target.path)">
                 <el-icon><Folder /></el-icon>
                 <span>打开文件夹</span>
             </div>
-            <div class="menu-item" @click="closeContextMenu(); openSubGroupDialog(contextMenu.target)">
+            <div class="menu-item" @click="closeContextMenu(); openSubGroupDialog(contextMenu.target.path)">
                 <el-icon><Plus /></el-icon>
                 <span>新建子分类...</span>
             </div>
-            <div class="menu-item" @click="closeContextMenu(); setGroupIcon(contextMenu.target)">
+            <div class="menu-item" @click="closeContextMenu(); setGroupIcon(contextMenu.target.path)">
                 <el-icon><Picture /></el-icon>
                 <span>设置图标</span>
             </div>
-            <div class="menu-item" @click="closeContextMenu(); renameGroup(contextMenu.target)">
+            <div class="menu-item" @click="closeContextMenu(); renameGroup(contextMenu.target.path)">
                 <el-icon><Edit /></el-icon>
                 <span>重命名</span>
             </div>
-             <div class="menu-item" @click="closeContextMenu(); deleteGroup(contextMenu.target)" style="color: #ff4949">
+             <div class="menu-item" @click="closeContextMenu(); deleteGroup(contextMenu.target.path)" style="color: #ff4949">
                 <el-icon><Delete /></el-icon>
                 <span>删除</span>
             </div>
@@ -2037,6 +2105,18 @@ const getGroupIcon = (groupId: string) => {
     width: 100%;
     padding-right: 8px;
     overflow: hidden;
+}
+
+.custom-tree-node.is-disabled {
+    opacity: 0.6;
+    /* filter: grayscale(100%);  Remove grayscale so the red icon pops out */
+    color: #999;
+}
+
+.disabled-icon {
+    margin-left: 6px;
+    color: #F56C6C; /* Red warning color */
+    font-size: 14px;
 }
 
 .custom-tree-node.reorder-hover {

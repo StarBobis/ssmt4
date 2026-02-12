@@ -23,9 +23,11 @@ pub struct ModWatcher(pub Mutex<Option<RecommendedWatcher>>);
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupInfo {
-    pub id: String, // Full path like "Ayaka/Outfit1"
+    pub id: String, // Full logical path like "Ayaka/Outfit1"
     pub name: String, // Just name "Outfit1"
     pub icon_path: Option<String>,
+    pub path: String, // Relative path on disk (including DISABLED_ prefixes)
+    pub enabled: bool, // Based on whether the folder itself (or parent) is disabled
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -107,7 +109,8 @@ fn scan_folder(
     results: &mut Vec<ModInfo>, 
     current_group: String,
     depth: usize,
-    groups_found: &mut Vec<GroupInfo>
+    groups_found: &mut Vec<GroupInfo>,
+    parent_disabled: bool,
 ) {
     if depth > 5 { return; } // Limit depth increased for multi-level
 
@@ -117,17 +120,30 @@ fn scan_folder(
             if path.is_dir() {
                 let dir_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
                 
-                let is_disabled = dir_name.to_uppercase().starts_with("DISABLED");
-                let clean_name = if is_disabled {
-                    if dir_name.to_uppercase().starts_with("DISABLED_") {
+                let is_folder_disabled = dir_name.to_uppercase().starts_with("DISABLED");
+                
+                // Effective state: If parent is disabled, this item is EFFECTIVELY disabled, 
+                // even if it doesn't have the prefix itself.
+                // However, for the folder RENAME/TOGGLE logic, we usually care about the explicit state of THIS folder.
+                // But for the Mod list display, we want to know if it's active in game.
+                let effective_disabled = parent_disabled || is_folder_disabled;
+
+                let clean_name = if is_folder_disabled {
+                     if dir_name.to_uppercase().starts_with("DISABLED_") {
                         dir_name[9..].to_string()
                     } else {
-                        dir_name[8..].to_string()
+                        // Just "DISABLED" or similar variants
+                        if dir_name.eq_ignore_ascii_case("DISABLED") {
+                             "DISABLED".to_string() // Edge case
+                        } else {
+                             dir_name[8..].to_string()
+                        }
                     }
                 } else {
                     dir_name.clone()
                 };
-
+                
+                // Relative path for ID/Storage
                 let relative_path = path.strip_prefix(base_mods_dir).unwrap_or(&path).to_string_lossy().to_string();
                 
                 // Determine if this directory is a mod or a category
@@ -186,9 +202,9 @@ fn scan_folder(
                      results.push(ModInfo {
                         id: relative_path.clone(),
                         name: clean_name.clone(),
-                        enabled: !is_disabled,
+                        enabled: !effective_disabled, // Mod is enabled only if self AND all parents are enabled
                         path: path.to_string_lossy().to_string(),
-                        relative_path,
+                        relative_path: relative_path.clone(),
                         preview_images: images,
                         group: current_group.clone(),
                         is_dir: true,
@@ -222,10 +238,12 @@ fn scan_folder(
                          id: next_group.clone(),
                          name: clean_name.clone(),
                          icon_path: icon,
+                         path: relative_path.clone(), // Store the real path associated with this group
+                         enabled: !effective_disabled,
                     });
 
                     // Recurse
-                    scan_folder(base_mods_dir, &path, results, next_group, depth + 1, groups_found);
+                    scan_folder(base_mods_dir, &path, results, next_group, depth + 1, groups_found, effective_disabled);
                 }
             }
         }
@@ -309,7 +327,7 @@ pub async fn scan_mods(app: AppHandle, game_name: String) -> Result<ModScanResul
     let mut groups_list = Vec::new();
 
     // 1. Scan for mods recursively
-    scan_folder(&mods_dir, &mods_dir, &mut mods, "Root".to_string(), 0, &mut groups_list);
+    scan_folder(&mods_dir, &mods_dir, &mut mods, "Root".to_string(), 0, &mut groups_list, false);
     
     // Sort groups by id
     groups_list.sort_by(|a, b| a.id.cmp(&b.id));
@@ -419,6 +437,61 @@ pub fn unwatch_mods(state: State<'_, ModWatcher>) -> Result<(), String> {
     *watcher_guard = None;
     println!("[ModWatcher] Stopped watching");
     Ok(())
+}
+
+#[tauri::command]
+pub async fn toggle_mod_group(app: AppHandle, game_name: String, group_path: String, enable: bool) -> Result<String, String> {
+    let install_dir = get_game_install_dir(&app, &game_name)?;
+    let mods_dir = install_dir.join("Mods");
+    // group_path is relative to Mods directory (e.g. "Group A" or "DISABLED_Group A")
+    // Frontend should pass the full relative path stored in field `GroupInfo.path`
+    
+    let current_full_path = mods_dir.join(&group_path);
+    if !current_full_path.exists() {
+        return Err("Group directory not found".to_string());
+    }
+    
+    // Safety check: ensure it is a directory
+    if !current_full_path.is_dir() {
+        return Err("Path is not a directory".to_string());
+    }
+
+    let parent = current_full_path.parent().ok_or("Invalid path")?;
+    let dirname = current_full_path.file_name().ok_or("Invalid filename")?.to_string_lossy().to_string();
+
+    let new_dirname = if enable {
+        if dirname.to_uppercase().starts_with("DISABLED_") {
+             dirname[9..].to_string()
+        } else if dirname.eq_ignore_ascii_case("DISABLED") {
+             // Edge case, don't rename pure "DISABLED" folder unless user explicitly did this?
+             return Ok(dirname);
+        } else if dirname.to_uppercase().starts_with("DISABLED") {
+             // Maybe "DISABLEDGroup"?
+             dirname[8..].to_string()
+        } else {
+             return Ok(dirname);
+        }
+    } else {
+        if !dirname.to_uppercase().starts_with("DISABLED") {
+            format!("DISABLED_{}", dirname)
+        } else {
+            return Ok(dirname);
+        }
+    };
+
+    let new_full_path = parent.join(&new_dirname);
+    
+    // Check if destination exists
+    if new_full_path.exists() {
+        return Err("A group with the target name already exists".to_string());
+    }
+
+    fs::rename(&current_full_path, &new_full_path)
+        .map_err(|e| format!("Failed to rename folder: {}", e))?;
+
+    // Return the new relative path
+    let new_relative = new_full_path.strip_prefix(&mods_dir).unwrap_or(&new_full_path).to_string_lossy().to_string();
+    Ok(new_relative)
 }
 
 #[tauri::command]

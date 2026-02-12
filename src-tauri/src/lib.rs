@@ -80,6 +80,7 @@ pub fn run() {
             commands::game_launcher::toggle_symlink,
             commands::mod_manager::scan_mods,
             commands::mod_manager::toggle_mod,
+            commands::mod_manager::toggle_mod_group,
             commands::mod_manager::open_game_mods_folder,
             commands::mod_manager::preview_mod_archive,
             commands::mod_manager::install_mod_archive,
