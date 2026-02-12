@@ -112,6 +112,15 @@ const openD3dxIni = async () => {
 };
 
 const showSettings = ref(false);
+const settingsModalRef = ref<InstanceType<typeof GameSettingsModal> | null>(null);
+
+const openSettingsAndUpdate = () => {
+    showSettings.value = true;
+    // Wait for modal to mount/open
+    setTimeout(() => {
+        settingsModalRef.value?.runPackageUpdate();
+    }, 100);
+};
 
 onMounted(() => {
   document.addEventListener('click', closeMenu);
@@ -173,6 +182,7 @@ onUnmounted(() => {
 
     <!-- Settings Modal -->
     <GameSettingsModal 
+      ref="settingsModalRef"
       v-model="showSettings" 
       :game-name="appSettings.currentConfigName"
     />
@@ -202,7 +212,7 @@ onUnmounted(() => {
             <el-dropdown-item @click="openD3dxIni">打开d3dx.ini</el-dropdown-item>
             <el-dropdown-item divided>开启Symlink</el-dropdown-item>
             <el-dropdown-item>关闭Symlink</el-dropdown-item>
-            <el-dropdown-item divided>检查3Dmigoto包更新</el-dropdown-item>
+            <el-dropdown-item divided @click="openSettingsAndUpdate">检查3Dmigoto包更新</el-dropdown-item>
 
           </el-dropdown-menu>
         </template>

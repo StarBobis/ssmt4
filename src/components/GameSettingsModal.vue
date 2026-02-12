@@ -428,6 +428,23 @@ watch(() => props.modelValue, (val) => {
 const close = () => {
   emit('update:modelValue', false);
 };
+
+// Expose methods to parent
+defineExpose({
+    switchTab: (tabId: string) => {
+        activeTab.value = tabId;
+    },
+    runPackageUpdate: () => {
+        // Ensure we are on the right tab visually
+        activeTab.value = '3dmigoto';
+        // Run the update check
+        if (canUpdatePackage.value) {
+            check3DMigotoPackageUpdate();
+        } else {
+             message('当前预设不支持自动更新整合包', { title: '提示', kind: 'info' });
+        }
+    }
+});
 </script>
 
 <template>

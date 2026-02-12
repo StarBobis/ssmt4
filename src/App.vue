@@ -159,10 +159,10 @@ input, textarea {
   */
   background: 
     /* 1. Seamless smooth fade from bottom (for potential footer text) */
-    linear-gradient(to top, rgba(0, 0, 0, 0.6) 0%, transparent 35%),
+    linear-gradient(to top, rgba(0, 0, 0, 0.5) 0%, transparent 25%),
     
     /* 2. Very subtle cinematic vignette (corners only, center is pure clean) */
-    radial-gradient(circle at 50% 50%, transparent 65%, rgba(0, 0, 0, 0.5) 120%);
+    radial-gradient(circle at 50% 50%, transparent 75%, rgba(0, 0, 0, 0.4) 140%);
 }
 
 .global-dim-layer {
