@@ -453,6 +453,96 @@ pub fn rename_mod_group(app: AppHandle, game_name: String, old_group: String, ne
 }
 
 #[tauri::command]
+pub fn rename_mod(app: AppHandle, game_name: String, mod_path: String, new_name: String) -> Result<(), String> {
+    let install_dir = get_game_install_dir(&app, &game_name)?;
+    let mods_dir = install_dir.join("Mods");
+    
+    // mod_path is relative to Mods dir, e.g., "Group/ModA" or "ModB"
+    let old_full_path = mods_dir.join(&mod_path);
+    
+    if !old_full_path.exists() {
+        return Err("Mod does not exist".to_string());
+    }
+    
+    let parent = old_full_path.parent().ok_or("Invalid mod path")?;
+    
+    // Handle potential "DISABLED_" prefix preservation logic if needed? 
+    // The user requirement says "Rename this Mod", usually implies renaming the visible name.
+    // If the mod is DISABLED, the folder name is DISABLED_ModName. 
+    // If the user effectively renames "ModName" to "NewName", the folder should become DISABLED_NewName?
+    // OR, simpler: just rename the folder to exactly what the user typed.
+    // If the user types "MyMod", and it was "DISABLED_OldMod", it becomes "MyMod" (implicitly enabled).
+    // But usually rename shouldn't change state.
+    // Let's assume the frontend passes the desired final name directly?
+    // Actually, `mod_path` usually points to the actual folder on disk (relative).
+    // However, looking at ModInfo logic: 
+    // `relative_path` is the real path on disk.
+    // `name` is the clean name.
+    // The frontend should probably handle the logic of keeping "DISABLED_" prefix if it wants to preserve state, 
+    // OR we just rename the folder to the new name provided. 
+    
+    // Wait, if I change the folder name, I lose the "DISABLED_" prefix if I don't check for it.
+    // Let's check if the current folder starts with DISABLED_.
+    let old_folder_name = old_full_path.file_name().unwrap().to_string_lossy().to_string();
+    let is_disabled = old_folder_name.to_uppercase().starts_with("DISABLED");
+    
+    let final_new_name = if is_disabled {
+        // If it was disabled, we persist the disabled state
+        // Check if the user already typed DISABLED_ in the new name? Unlikely.
+        // Let's assume new_name is just the name.
+        if new_name.to_uppercase().starts_with("DISABLED") {
+             new_name // User typed it manually?
+        } else {
+             if old_folder_name.to_uppercase().starts_with("DISABLED_") {
+                 format!("DISABLED_{}", new_name)
+             } else {
+                 // Maybe just "DISABLED" (no underscore)?
+                  format!("DISABLED{}", new_name)
+             }
+        }
+    } else {
+        new_name
+    };
+
+    let new_full_path = parent.join(&final_new_name);
+
+    if new_full_path.exists() {
+        return Err("A mod with this name already exists".to_string());
+    }
+
+    fs::rename(&old_full_path, &new_full_path).map_err(|e| format!("Failed to rename mod: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn add_mod_preview_images(app: AppHandle, game_name: String, mod_path: String, image_paths: Vec<String>) -> Result<(), String> {
+    let install_dir = get_game_install_dir(&app, &game_name)?;
+    let mods_dir = install_dir.join("Mods");
+    let target_mod_dir = mods_dir.join(&mod_path);
+
+    if !target_mod_dir.exists() {
+        return Err("Mod directory does not exist".to_string());
+    }
+    
+    for img_path_str in image_paths {
+        let src_path = PathBuf::from(&img_path_str);
+        if src_path.exists() && src_path.is_file() {
+            let file_name = src_path.file_name().unwrap_or_default();
+            // We should avoid overwriting existing files if possible, or maybe just overwrite.
+            // Let's check if file exists.
+            let dest_path = target_mod_dir.join(file_name);
+            
+            // Allow overwriting or simple copy
+            if let Err(e) = fs::copy(&src_path, &dest_path) {
+                return Err(format!("Failed to copy image {:?}: {}", src_path, e));
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+#[tauri::command]
 pub fn delete_mod_group(app: AppHandle, game_name: String, group_name: String) -> Result<(), String> {
     let install_dir = get_game_install_dir(&app, &game_name)?;
     let group_dir = install_dir.join("Mods").join(&group_name);

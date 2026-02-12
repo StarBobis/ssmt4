@@ -188,6 +188,56 @@ const moveModToGroup = async (mod: ModInfo, groupName: string) => {
     }
 };
 
+const renameMod = async (mod: ModInfo) => {
+    try {
+        const { value: newName } = await ElMessageBox.prompt('请输入新的Mod名称', '重命名Mod', {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            inputValue: mod.name,
+            inputPattern: /^[^\\/:*?"<>|]+$/,
+            inputErrorMessage: '名称不能包含非法字符'
+        });
+
+        if (newName && newName !== mod.name) {
+            await invoke('rename_mod', {
+                gameName: selectedGame.value,
+                modPath: mod.relativePath,
+                newName: newName.trim()
+            });
+            ElMessage.success('重命名成功');
+            // Allow watcher to pick it up, or force refresh if needed
+             setTimeout(fetchMods, 200); 
+        }
+    } catch {
+        // User cancelled
+    }
+};
+
+const addPreviewImages = async (mod: ModInfo) => {
+    try {
+        const selected = await open({
+            multiple: true,
+            filters: [{
+                name: 'Images',
+                extensions: ['png', 'jpg', 'jpeg', 'bmp', 'webp', 'gif']
+            }]
+        });
+
+        if (selected && Array.isArray(selected) && selected.length > 0) {
+            await invoke('add_mod_preview_images', {
+                gameName: selectedGame.value,
+                modPath: mod.relativePath,
+                imagePaths: selected
+            });
+            ElMessage.success(`成功添加 ${selected.length} 张预览图`);
+            setTimeout(fetchMods, 500); 
+        }
+    } catch (err) {
+        console.error('Failed to add preview images', err);
+        ElMessage.error('添加预览图失败');
+    }
+};
+
 const deleteMod = async (mod: ModInfo) => {
     try {
         await ElMessageBox.confirm(
@@ -1536,6 +1586,14 @@ const getGroupIcon = (groupId: string) => {
                 </div>
             </div>
             <div class="menu-divider"></div>
+            <div class="menu-item" @click="closeContextMenu(); renameMod(contextMenu.target)">
+                <el-icon><Edit /></el-icon>
+                <span>重命名此Mod</span>
+            </div>
+            <div class="menu-item" @click="closeContextMenu(); addPreviewImages(contextMenu.target)">
+                <el-icon><Picture /></el-icon>
+                <span>添加预览图</span>
+            </div>
             <div class="menu-item" @click="closeContextMenu(); deleteMod(contextMenu.target)" style="color: #ff4949">
                 <el-icon><Delete /></el-icon>
                 <span>删除</span>
