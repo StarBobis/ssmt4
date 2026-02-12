@@ -16,29 +16,14 @@
 
 </div>
 
----
-
-## ⚠️ 开发声明
-
-> **开发着玩儿的**
->
-> 这次新版本SSMT4的开发完全是抱着玩儿的心态进行的，所以任何奇怪/奇葩/逆天的设计都有可能出现。
->
-> **本次开发的宗旨是：工具的趣味性、情绪价值和界面美观性 远远大于 其它需求。**
->
-> _追求稳定使用请暂时先使用 SSMT3 + TheHerta3 系列工具，仍在稳定更新维护中。_
+![alt text](image.png)
 
 ---
 
-## 📸 预览
+## 📈 Star History
 
-![Preview](image.png)
+[![Star History Chart](https://api.star-history.com/svg?repos=StarBobis/SSMT4&type=Date)](https://star-history.com/#StarBobis/SSMT4&Date)
 
-## 📚 说明
-
-SSMT4使用文档: [https://starbobis.github.io/SSMT4-Documents/](https://starbobis.github.io/SSMT4-Documents/)
-
----
 
 ## 💖 特别感谢
 
@@ -56,12 +41,4 @@ SSMT4使用文档: [https://starbobis.github.io/SSMT4-Documents/](https://starbo
 
 感谢以上各位大力赞助的 AI Token 米支持！  
 他们的支持让此项目的开发进度大大加快，特别感谢！
-
----
-
-## 📈 Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=StarBobis/SSMT4&type=Date)](https://star-history.com/#StarBobis/SSMT4&Date)
-
-
 

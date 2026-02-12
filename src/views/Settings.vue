@@ -30,9 +30,9 @@ const selectCacheDir = async () => {
       <el-form label-width="140px">
         <el-form-item :label="t('settings.language')">
           <el-select v-model="appSettings.locale" placeholder="Select language" style="width: 200px">
-            <el-option label="English" value="en" />
             <el-option label="简体中文" value="zhs" />
             <el-option label="繁體中文" value="zht" />
+            <el-option label="English" value="en" />
           </el-select>
         </el-form-item>
         <el-form-item label="SSMT缓存文件夹">
@@ -79,12 +79,6 @@ const selectCacheDir = async () => {
       <el-form label-width="140px">
         <el-form-item label="Mod管理页面">
           <el-switch v-model="appSettings.showMods" />
-        </el-form-item>
-        <el-form-item label="工作台页面">
-          <el-switch v-model="appSettings.showWorkbench" />
-        </el-form-item>
-        <el-form-item label="贴图标记页面">
-          <el-switch v-model="appSettings.showStickers" />
         </el-form-item>
         <el-form-item label="常用网址页面">
           <el-switch v-model="appSettings.showWebsites" />

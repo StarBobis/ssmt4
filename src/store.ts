@@ -18,16 +18,12 @@ export interface AppSettings {
   bgType: BGType;
   bgImage: string;
   bgVideo: string;
-  sidebarOpacity: number;
-  sidebarBlur: number;
   contentOpacity: number;
   contentBlur: number;
   cacheDir: string;
   currentConfigName: string;
   githubToken: string;
   showMods: boolean;
-  showWorkbench: boolean;
-  showStickers: boolean;
   showWebsites: boolean;
   showDocuments: boolean;
   locale: Locale;  // 我新增
@@ -46,19 +42,15 @@ const defaultSettings: AppSettings = {
   bgType: BGType.Image,
   bgImage: '',
   bgVideo: '',
-  sidebarOpacity: 0.3,
-  sidebarBlur: 20,
   contentOpacity: 0,
   contentBlur: 0,
   cacheDir: '',
   currentConfigName: 'Default',
   githubToken: '',
   showMods: true,
-  showWorkbench: false,
-  showStickers: false,
   showWebsites: false,
   showDocuments: false,
-  locale: 'en' // 新增
+  locale: 'zhs' // 新增
 }
 
 export const appSettings = reactive<AppSettings>({ ...defaultSettings })
