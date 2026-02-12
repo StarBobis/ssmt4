@@ -4,3 +4,4 @@ pub mod process;
 pub mod game_scanner;
 pub mod game_config;
 pub mod game_launcher;
+pub mod mod_manager;

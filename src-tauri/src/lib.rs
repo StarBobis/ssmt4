@@ -31,6 +31,9 @@ pub fn run() {
 
             // 3. 将配置包装在 Mutex 中，并托管给 Tauri 全局状态
             app.manage(Mutex::new(config));
+            
+            // 4. 初始化 ModWatcher 状态
+            app.manage(commands::mod_manager::ModWatcher(Mutex::new(None)));
 
             Ok(())
         })
@@ -71,7 +74,18 @@ pub fn run() {
             commands::game_config::get_3dmigoto_latest_release,
             commands::game_config::install_3dmigoto_update,
             commands::game_launcher::start_game,
-            commands::game_launcher::toggle_symlink
+            commands::mod_manager::watch_mods,
+            commands::mod_manager::unwatch_mods,
+            commands::game_launcher::toggle_symlink,
+            commands::mod_manager::scan_mods,
+            commands::mod_manager::toggle_mod,
+            commands::mod_manager::open_game_mods_folder,
+            commands::mod_manager::preview_mod_archive,
+            commands::mod_manager::install_mod_archive,
+            commands::mod_manager::create_mod_group,
+            commands::mod_manager::rename_mod_group,
+            commands::mod_manager::move_mod_to_group,
+            commands::mod_manager::delete_mod_group
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

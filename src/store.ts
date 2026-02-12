@@ -23,6 +23,7 @@ export interface AppSettings {
   cacheDir: string;
   currentConfigName: string;
   githubToken: string;
+  showMods: boolean;
   showWorkbench: boolean;
   showStickers: boolean;
   showWebsites: boolean;
