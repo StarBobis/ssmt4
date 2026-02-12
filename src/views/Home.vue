@@ -322,7 +322,7 @@ onUnmounted(() => {
   /* Or actually, keep it but ensure content-area is full height */
   margin-top: auto; /* Push to bottom */
   align-self: flex-end;
-  gap: 16px; /* Space between buttons */
+  gap: 10px; /* Space between buttons */
   
   /* Ensure it doesn't overlap with sidebar if window is small, though structure prevents it */
   padding-right: 40px; /* Right padding from screen edge */
@@ -335,7 +335,7 @@ onUnmounted(() => {
   color: #000000;
   display: flex;
   align-items: center;
-  padding: 0 24px 0 12px; /* Adjusted padding-right to balance with text margin */
+  padding: 0 44px 0 12px;
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: 'Microsoft YaHei', sans-serif;
@@ -345,9 +345,9 @@ onUnmounted(() => {
 }
 
 .start-game-btn .btn-text {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 900;
-  margin-left: 16px;
+  margin-left: 30px;
   letter-spacing: 2px;
 }
 
