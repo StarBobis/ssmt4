@@ -190,13 +190,15 @@ const moveModToGroup = async (mod: ModInfo, groupName: string) => {
 
 const renameMod = async (mod: ModInfo) => {
     try {
-        const { value: newName } = await ElMessageBox.prompt('请输入新的Mod名称', '重命名Mod', {
+        const result = await ElMessageBox.prompt('请输入新的Mod名称', '重命名Mod', {
             confirmButtonText: '确定',
             cancelButtonText: '取消',
             inputValue: mod.name,
             inputPattern: /^[^\\/:*?"<>|]+$/,
             inputErrorMessage: '名称不能包含非法字符'
-        });
+        }) as any;
+        
+        const newName = result.value;
 
         if (newName && newName !== mod.name) {
             await invoke('rename_mod', {
