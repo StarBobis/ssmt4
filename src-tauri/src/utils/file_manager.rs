@@ -55,8 +55,17 @@ pub fn copy_boot_files(app: &AppHandle, target_dir: &Path) {
     for filename in files {
         let dest_path = target_dir.join(filename);
         // Helper to check existence and copy
+        // Check 1: Direct in resource_dir (flattened)
         let mut source_to_use = resource_dir.join(filename);
         
+        // Check 2: In resources subdir (common due to tauri.conf.json structure)
+        if !source_to_use.exists() {
+            let nested = resource_dir.join("resources").join(filename);
+            if nested.exists() {
+                source_to_use = nested;
+            }
+        }
+
         if !source_to_use.exists() {
             // Fallback for dev environment
             let dev_path = PathBuf::from("resources").join(filename);

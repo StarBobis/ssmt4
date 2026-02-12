@@ -143,6 +143,15 @@ pub async fn start_game(app: AppHandle, game_name: String) -> Result<(), String>
              
              // Check if upx.exe exists
              let mut upx_to_use = upx_exe.clone();
+             
+             // Check nested resources folder (production standard)
+             if !upx_to_use.exists() {
+                 let nested_upx = resource_dir.join("resources").join("upx.exe");
+                 if nested_upx.exists() {
+                     upx_to_use = nested_upx;
+                 }
+             }
+
              if !upx_to_use.exists() {
                  let dev_upx = PathBuf::from("resources").join("upx.exe");
                  if dev_upx.exists() {
