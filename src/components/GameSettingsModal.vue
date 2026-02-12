@@ -187,8 +187,8 @@ const selectBackground = async () => {
   try {
     const isVideo = config.basic.backgroundType === 'Video';
     const filters = isVideo
-      ? [{ name: 'Videos', extensions: ['mp4', 'webm'] }]
-      : [{ name: 'Images', extensions: ['png', 'webp'] }];
+      ? [{ name: 'Videos', extensions: ['mp4', 'webm', 'ogg', 'mov'] }]
+      : [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp', 'ico', 'avif'] }];
 
     const file = await open({
       multiple: false,
