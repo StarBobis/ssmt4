@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, reactive, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -61,6 +61,60 @@ const createNewGroup = async () => {
         }
     } catch {
         // User cancelled
+    }
+};
+
+const subGroupDialog = reactive({
+    visible: false,
+    parentId: '',
+    name: '',
+    icon: ''
+});
+
+const openSubGroupDialog = (parentId: string) => {
+    subGroupDialog.visible = true;
+    subGroupDialog.parentId = parentId;
+    subGroupDialog.name = '';
+    subGroupDialog.icon = '';
+};
+
+const pickSubGroupIcon = async () => {
+    const picked = await open({
+        multiple: false,
+        filters: [{ name: 'Image', extensions: ['png', 'jpg', 'jpeg', 'bmp', 'webp'] }]
+    });
+    if (picked) {
+        subGroupDialog.icon = picked;
+    }
+};
+
+const confirmSubGroup = async () => {
+    if (!subGroupDialog.name) {
+        ElMessage.warning('请输入子分类名称');
+        return;
+    }
+    const newGroupPath = subGroupDialog.parentId ? `${subGroupDialog.parentId}/${subGroupDialog.name}` : subGroupDialog.name;
+    try {
+        await invoke('create_mod_group', {
+            gameName: selectedGame.value,
+            groupName: newGroupPath
+        });
+        if (subGroupDialog.icon) {
+            try {
+                await invoke('set_mod_group_icon', {
+                    gameName: selectedGame.value,
+                    groupPath: newGroupPath,
+                    iconPath: subGroupDialog.icon
+                });
+            } catch (e: any) {
+                ElMessage.warning('子分类创建成功，但图标设置失败: ' + e);
+            }
+        }
+        ElMessage.success('子分类创建成功');
+        subGroupDialog.visible = false;
+        fetchMods();
+    } catch (e: any) {
+        ElMessage.error('创建失败: ' + e);
     }
 };
 
@@ -166,6 +220,7 @@ const searchQuery = ref('');
 const selectedGroup = ref('All');
 // Sorting state
 const GROUP_ORDER_KEY = 'ssmt4_group_orders_v1';
+const GROUP_EXPANDED_KEY = 'ssmt4_group_expanded_v1';
 
 const ORDER_STORAGE_KEY = 'ssmt4_mod_manual_orders_v1';
 
@@ -227,6 +282,27 @@ const groupDragState = reactive({
     sourceParent: '' as string,
 });
 const groupHoverId = ref<string | null>(null);
+const loadExpandedState = () => {
+    if (typeof localStorage === 'undefined') return {} as Record<string, string[]>;
+    try {
+        const raw = localStorage.getItem(GROUP_EXPANDED_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+                console.log('[GroupExpanded] Loaded from storage', parsed);
+                return parsed;
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to load expanded groups', e);
+    }
+    console.log('[GroupExpanded] No stored data, using empty state');
+    return {} as Record<string, string[]>;
+};
+
+const expandedState = ref<Record<string, string[]>>(loadExpandedState());
+const expandedKeys = ref<string[]>([]);
+const groupTreeRef = ref();
 
 const persistManualOrders = () => {
     if (typeof localStorage === 'undefined') return;
@@ -243,6 +319,16 @@ const persistGroupOrders = () => {
         localStorage.setItem(GROUP_ORDER_KEY, JSON.stringify(groupOrders.value));
     } catch (e) {
         console.warn('Failed to save group orders', e);
+    }
+};
+
+const persistExpandedState = () => {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(GROUP_EXPANDED_KEY, JSON.stringify(expandedState.value));
+        console.log('[GroupExpanded] Saved', expandedState.value);
+    } catch (e) {
+        console.warn('Failed to save expanded state', e);
     }
 };
 
@@ -266,6 +352,68 @@ const sanitizeGroupOrder = (game: string, parentId: string, childrenIds: string[
         persistGroupOrders();
     }
     return next;
+};
+
+const sanitizeExpanded = (game: string) => {
+    const allIds = new Set(availableGroups.value.map(g => g.id));
+    // Safety: If no groups available (e.g. data not loaded or error), skip sanitization
+    // so we don't wipe the user's saved state accidentally.
+    if (allIds.size === 0) {
+         return [...(expandedState.value[game] || [])];
+    }
+
+    const current = expandedState.value[game] || [];
+    const filtered = current.filter(id => allIds.has(id));
+    const changed = filtered.length !== current.length;
+    if (!expandedState.value[game]) {
+        expandedState.value[game] = filtered;
+        console.log('[GroupExpanded] Init bucket for', game, filtered);
+        persistExpandedState();
+    } else if (changed) {
+        expandedState.value[game] = filtered;
+        console.log('[GroupExpanded] Filtered missing nodes for', game, filtered);
+        persistExpandedState();
+    }
+    console.log('[GroupExpanded] Sanitize result for', game, expandedState.value[game]);
+    return [...(expandedState.value[game] || [])];
+};
+
+const applyExpandedToTree = () => {
+    nextTick(() => {
+        try {
+            const tree = groupTreeRef.value as any;
+            const keys = [...expandedKeys.value];
+            console.log('[GroupExpanded] applyExpandedToTree', { keys, hasTree: !!tree });
+            if (!tree) {
+                console.warn('[GroupExpanded] tree ref missing, skip apply');
+                return;
+            }
+            if (typeof tree.setExpandedKeys === 'function') {
+                tree.setExpandedKeys(keys);
+                return;
+            }
+            if (tree.store && typeof tree.store.setDefaultExpandedKeys === 'function') {
+                tree.store.setDefaultExpandedKeys(keys);
+                return;
+            }
+            // Fallback: manually expand nodes
+            if (typeof tree.getNode === 'function') {
+                keys.forEach(id => {
+                    const node = tree.getNode(id);
+                    if (node) node.expanded = true;
+                });
+            } else if (tree.store && typeof tree.store.getNode === 'function') {
+                keys.forEach(id => {
+                    const node = tree.store.getNode(id);
+                    if (node) node.expanded = true;
+                });
+            } else {
+                console.warn('[GroupExpanded] No expand APIs available');
+            }
+        } catch (e) {
+            console.warn('Failed to apply expanded keys', e);
+        }
+    });
 };
 
 const applyGroupOrder = (parentId: string, nodes: any[]) => {
@@ -466,10 +614,6 @@ const onDrop = async (e: DragEvent, targetGroupId: string) => {
     }
 };
 
-const clearManualSortHover = () => {
-    dragOverId.value = null;
-};
-
 const onManualSortMouseDown = (e: MouseEvent, mod: ModInfo) => {
     if (e.button !== 0) return;
     manualSortState.active = true;
@@ -564,6 +708,7 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 // Initialize selected game from store if possible
 onMounted(async () => {
     // ... existing init code ...
+    console.log('[GroupExpanded] onMounted start');
     if (appSettings.currentConfigName && gamesList.find(g => g.name === appSettings.currentConfigName)) {
         selectedGame.value = appSettings.currentConfigName;
     } else if (gamesList.length > 0) {
@@ -642,7 +787,7 @@ watch([mods, selectedGame, selectedGroup], () => {
     if (ctx) sanitizeOrderForContext(ctx.game, ctx.group);
 }, { immediate: true });
 
-watch([availableGroups, selectedGame], () => {
+watch(availableGroups, () => {
     const game = selectedGame.value;
     if (!game) return;
     // Build children map per parent for sanitization
@@ -655,7 +800,16 @@ watch([availableGroups, selectedGame], () => {
     Object.entries(buckets).forEach(([parent, ids]) => {
         sanitizeGroupOrder(game, parent, ids);
     });
+    // Expanded keys sanitize & apply (fresh copy to trigger update)
+    expandedKeys.value = [...sanitizeExpanded(game)];
+    console.log('[GroupExpanded] Apply after groups refresh', expandedKeys.value);
+    applyExpandedToTree();
 }, { immediate: true });
+
+watch(expandedKeys, () => {
+    console.log('[GroupExpanded] expandedKeys watcher', expandedKeys.value);
+    applyExpandedToTree();
+});
 
 const handleFileDrop = async (path: string) => {
     // Check extension
@@ -742,6 +896,13 @@ const startWatching = async (gameName: string) => {
     try {
         // First load data
         await refreshMods(gameName);
+        
+        // Restore expanded state after data is loaded
+        expandedKeys.value = sanitizeExpanded(gameName);
+        console.log('[GroupExpanded] Restored state after refresh', gameName, expandedKeys.value);
+        applyExpandedToTree();
+
+        console.log('[GroupExpanded] After refreshMods', gameName, { groups: availableGroups.value.map(g => g.id), expandedKeys: expandedKeys.value });
         // Then start watching (which might fail if folder doesn't exist, but that's ok)
         await invoke('watch_mods', { gameName });
     } catch (error) {
@@ -938,6 +1099,34 @@ const reorderGroup = (sourceId: string, targetId: string) => {
     persistGroupOrders();
 };
 
+const onGroupExpand = (data: any) => {
+    const game = selectedGame.value;
+    if (!game) return;
+    const id = data.id;
+    const set = new Set(expandedKeys.value);
+    if (!set.has(id)) {
+        set.add(id);
+        expandedKeys.value = Array.from(set);
+        expandedState.value[game] = expandedKeys.value;
+        console.log('[GroupExpanded] Expanded', id, '->', expandedKeys.value);
+        persistExpandedState();
+    }
+};
+
+const onGroupCollapse = (data: any) => {
+    const game = selectedGame.value;
+    if (!game) return;
+    const id = data.id;
+    const set = new Set(expandedKeys.value);
+    if (set.has(id)) {
+        set.delete(id);
+        expandedKeys.value = Array.from(set);
+        expandedState.value[game] = expandedKeys.value;
+        console.log('[GroupExpanded] Collapsed', id, '->', expandedKeys.value);
+        persistExpandedState();
+    }
+};
+
 const onGroupMouseDown = (e: MouseEvent, groupId: string) => {
     if (groupId === 'All' || groupId === 'Root') return;
     if (e.button !== 0) return;
@@ -1108,13 +1297,18 @@ const getGroupIcon = (groupId: string) => {
                 
                 <el-tree
                     v-if="groupTree.length > 0"
+                    :key="'tree-' + selectedGame"
+                    ref="groupTreeRef"
                     :data="groupTree"
                     node-key="id"
                     :props="{ label: 'label', children: 'children' }"
                     :expand-on-click-node="false"
+                    :default-expanded-keys="expandedKeys"
                     :current-node-key="selectedGroup"
                     highlight-current
                     @node-click="(data) => selectedGroup = data.id"
+                    @node-expand="onGroupExpand"
+                    @node-collapse="onGroupCollapse"
                     class="group-tree"
                 >
                     <template #default="{ node, data }">
@@ -1260,6 +1454,27 @@ const getGroupIcon = (groupId: string) => {
         </template>
     </el-dialog>
 
+    <!-- Sub Group Dialog -->
+    <el-dialog v-model="subGroupDialog.visible" title="新建子分类" width="420px" align-center custom-class="glass-dialog">
+        <el-form label-width="90px">
+            <el-form-item label="名称">
+                <el-input v-model="subGroupDialog.name" placeholder="请输入子分类名称" />
+            </el-form-item>
+            <el-form-item label="图标（可选）">
+                <div class="subgroup-icon-row">
+                    <el-input v-model="subGroupDialog.icon" placeholder="未选择" readonly />
+                    <el-button type="primary" plain @click="pickSubGroupIcon">选择图标</el-button>
+                </div>
+            </el-form-item>
+        </el-form>
+        <template #footer>
+            <span class="dialog-footer">
+                <el-button @click="subGroupDialog.visible = false">取消</el-button>
+                <el-button type="primary" @click="confirmSubGroup">确认</el-button>
+            </span>
+        </template>
+    </el-dialog>
+
     <!-- Custom Context Menu -->
     <div 
         v-if="contextMenu.visible"
@@ -1276,19 +1491,19 @@ const getGroupIcon = (groupId: string) => {
                 <el-icon class="arrow-right"><ArrowRight /></el-icon>
                 
                 <div class="submenu glass-panel">
-                    <div class="menu-item" @click="moveModToGroup(contextMenu.target, 'Root')">
+                    <div class="menu-item" @click="closeContextMenu(); moveModToGroup(contextMenu.target, 'Root')">
                         <span>未分类 (Root)</span>
                     </div>
                     <div 
                         v-for="group in groups.filter((g: any) => g.id !== 'All' && g.id !== 'Root')" 
                         :key="group.id"
                         class="menu-item"
-                        @click="moveModToGroup(contextMenu.target, group.id)"
+                        @click="closeContextMenu(); moveModToGroup(contextMenu.target, group.id)"
                     >
                         <span>{{ group.id }}</span>
                     </div>
                     <div class="menu-divider"></div>
-                     <div class="menu-item" @click="createNewGroup">
+                     <div class="menu-item" @click="closeContextMenu(); createNewGroup()">
                         <el-icon><Plus /></el-icon>
                         <span>新建分类...</span>
                     </div>
@@ -1299,19 +1514,23 @@ const getGroupIcon = (groupId: string) => {
          <div v-if="contextMenu.type === 'group'" class="menu-content">
             <div class="menu-header">{{ contextMenu.target.split('/').pop() }}</div>
             <div class="menu-divider"></div>
-            <div class="menu-item" @click="openModGroupFolder(contextMenu.target)">
+            <div class="menu-item" @click="closeContextMenu(); openModGroupFolder(contextMenu.target)">
                 <el-icon><Folder /></el-icon>
                 <span>打开文件夹</span>
             </div>
-            <div class="menu-item" @click="setGroupIcon(contextMenu.target)">
+            <div class="menu-item" @click="closeContextMenu(); openSubGroupDialog(contextMenu.target)">
+                <el-icon><Plus /></el-icon>
+                <span>新建子分类...</span>
+            </div>
+            <div class="menu-item" @click="closeContextMenu(); setGroupIcon(contextMenu.target)">
                 <el-icon><Picture /></el-icon>
                 <span>设置图标</span>
             </div>
-            <div class="menu-item" @click="renameGroup(contextMenu.target)">
+            <div class="menu-item" @click="closeContextMenu(); renameGroup(contextMenu.target)">
                 <el-icon><Edit /></el-icon>
                 <span>重命名</span>
             </div>
-             <div class="menu-item" @click="deleteGroup(contextMenu.target)" style="color: #ff4949">
+             <div class="menu-item" @click="closeContextMenu(); deleteGroup(contextMenu.target)" style="color: #ff4949">
                 <el-icon><Delete /></el-icon>
                 <span>删除</span>
             </div>
@@ -1477,6 +1696,11 @@ const getGroupIcon = (groupId: string) => {
     font-size: 13px;
     color: #d1e8ff;
     border: 1px dashed rgba(64, 158, 255, 0.5);
+}
+
+.subgroup-icon-row {
+    display: flex;
+    gap: 8px;
 }
 
 /* Scrollbar styling for webkit */
