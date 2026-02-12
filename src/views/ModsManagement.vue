@@ -179,6 +179,213 @@ const installForm = reactive({
 const installPreview = ref<ArchivePreview | null>(null);
 const isInstalling = ref(false);
 
+// Sidebar Resizing
+const sidebarWidth = ref(220);
+const isResizing = ref(false);
+
+const startResize = (e: MouseEvent) => {
+    isResizing.value = true;
+    const startX = e.clientX;
+    const startWidth = sidebarWidth.value;
+
+    const doResize = (moveEvent: MouseEvent) => {
+        const diff = moveEvent.clientX - startX;
+        const newWidth = startWidth + diff;
+        if (newWidth >= 150 && newWidth <= 500) {
+            sidebarWidth.value = newWidth;
+        }
+    };
+
+    const stopResize = () => {
+        isResizing.value = false;
+        document.removeEventListener('mousemove', doResize);
+        document.removeEventListener('mouseup', stopResize);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', doResize);
+    document.addEventListener('mouseup', stopResize);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+};
+
+// Native DnD (kept for completeness) + Manual fallback
+const draggingMod = ref<ModInfo | null>(null);
+
+// Manual drag state to bypass WebView native DnD quirks
+const manualDrag = reactive({
+    active: false,
+    startX: 0,
+    startY: 0,
+    hasMoved: false,
+    mod: null as ModInfo | null,
+    lastHoverEl: null as HTMLElement | null,
+});
+
+// Global debug listeners (removed on unmount)
+let globalDragOverLogger: ((e: DragEvent) => void) | null = null;
+let globalDragEnterLogger: ((e: DragEvent) => void) | null = null;
+
+// -------- Manual Drag Fallback (mouse-based) --------
+const clearManualHover = () => {
+    if (manualDrag.lastHoverEl) {
+        manualDrag.lastHoverEl.classList.remove('drag-over');
+        manualDrag.lastHoverEl = null;
+    }
+};
+
+const pickGroupFromPoint = (x: number, y: number): string | null => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const groupEl = el?.closest?.('[data-group-id]') as HTMLElement | null;
+    return groupEl?.dataset.groupId || null;
+};
+
+const onCardMouseDown = (e: MouseEvent, mod: ModInfo) => {
+    if (e.button !== 0) return; // left button only
+    manualDrag.active = true;
+    manualDrag.startX = e.clientX;
+    manualDrag.startY = e.clientY;
+    manualDrag.hasMoved = false;
+    manualDrag.mod = mod;
+    document.addEventListener('mousemove', onCardMouseMove);
+    document.addEventListener('mouseup', onCardMouseUp);
+};
+
+const onCardMouseMove = (e: MouseEvent) => {
+    if (!manualDrag.active) return;
+    const dx = e.clientX - manualDrag.startX;
+    const dy = e.clientY - manualDrag.startY;
+    if (!manualDrag.hasMoved && Math.hypot(dx, dy) > 3) {
+        manualDrag.hasMoved = true;
+        document.body.style.userSelect = 'none';
+        console.log('[ManualDrag] start');
+    }
+
+    if (manualDrag.hasMoved) {
+        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+        const groupEl = el?.closest?.('[data-group-id]') as HTMLElement | null;
+        if (groupEl !== manualDrag.lastHoverEl) {
+            clearManualHover();
+            if (groupEl) {
+                groupEl.classList.add('drag-over');
+                manualDrag.lastHoverEl = groupEl;
+            }
+        }
+    }
+};
+
+const onCardMouseUp = async (e: MouseEvent) => {
+    document.removeEventListener('mousemove', onCardMouseMove);
+    document.removeEventListener('mouseup', onCardMouseUp);
+
+    if (!manualDrag.active) return;
+    const mod = manualDrag.mod;
+    const moved = manualDrag.hasMoved;
+    const targetGroupId = pickGroupFromPoint(e.clientX, e.clientY);
+
+    clearManualHover();
+    manualDrag.active = false;
+    manualDrag.mod = null;
+    manualDrag.hasMoved = false;
+    document.body.style.userSelect = '';
+
+    // Treat as click if not actually dragged
+    if (!moved) return;
+
+    if (!mod || !targetGroupId || targetGroupId === 'All' || mod.group === targetGroupId) return;
+
+    try {
+        await invoke('move_mod_to_group', {
+            gameName: selectedGame.value,
+            modId: mod.id,
+            newGroup: targetGroupId
+        });
+        ElMessage.success({
+            message: `已移动到 ${targetGroupId === 'Root' ? '未分类' : targetGroupId}`,
+            offset: 48 
+        });
+    } catch (e: any) {
+        ElMessage.error({
+            message: `移动失败: ${e}`,
+            offset: 48
+        });
+    }
+};
+
+const onDragEnter = (e: DragEvent) => {
+    console.log('[DragEnter]', e.currentTarget);
+    const target = (e.currentTarget as HTMLElement);
+    target.classList.add('drag-over');
+};
+
+const onDragOver = (e: DragEvent) => {
+    e.preventDefault(); // Necessary to allow dropping
+    
+    if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+    }
+    
+    const target = (e.currentTarget as HTMLElement);
+    if (!target.classList.contains('drag-over')) {
+        target.classList.add('drag-over');
+    }
+};
+
+const onDragLeave = (e: DragEvent) => {
+    const target = (e.currentTarget as HTMLElement);
+    // Fix: Only remove class if we are actually leaving the element, 
+    // not just entering a child element (like the text span or icon)
+    const related = e.relatedTarget as Node | null;
+    if (target.contains(related)) {
+        return;
+    }
+    target.classList.remove('drag-over');
+};
+
+const onDrop = async (e: DragEvent, targetGroupId: string) => {
+    e.preventDefault();
+    const target = (e.currentTarget as HTMLElement);
+    target.classList.remove('drag-over');
+
+    const rawData = e.dataTransfer?.getData('text/plain');
+    const mod = draggingMod.value;
+
+    console.log('[Drop]', { targetGroupId, rawData, modId: mod?.id });
+
+    if (mod && (mod.id === rawData || !rawData)) {
+        const modId = mod.id;
+        
+        if (mod.group === targetGroupId) return;
+        if (targetGroupId === 'All') {
+            return; 
+        }
+    
+        try {
+            await invoke('move_mod_to_group', {
+                gameName: selectedGame.value,
+                modId: modId, 
+                newGroup: targetGroupId
+            });
+            
+            ElMessage.success({
+                message: `已移动到 ${targetGroupId === 'Root' ? '未分类' : targetGroupId}`,
+                offset: 48 
+            });
+        } catch (e: any) {
+             ElMessage.error({
+                message: `移动失败: ${e}`,
+                offset: 48
+            });
+        } finally {
+            draggingMod.value = null;
+            document.body.style.userSelect = '';
+        }
+    } else {
+        console.warn('[Drop] No mod captured or ID mismatch', { rawData, dragging: mod?.id });
+    }
+};
+
 // Watcher cleanup
 let unlistenFileChange: UnlistenFn | null = null;
 let unlistenDrop: UnlistenFn | null = null;
@@ -216,6 +423,23 @@ onMounted(async () => {
         // Initial load
         startWatching(selectedGame.value);
     }
+
+    // Debug: log global dragenter/dragover to see if events fire anywhere
+    globalDragOverLogger = (e: DragEvent) => {
+        // Only log for our page container to reduce noise
+        const t = e.target as HTMLElement | null;
+        if (t && t.closest && t.closest('.mod-manager')) {
+            console.log('[Global dragover]', t.className);
+        }
+    };
+    globalDragEnterLogger = (e: DragEvent) => {
+        const t = e.target as HTMLElement | null;
+        if (t && t.closest && t.closest('.mod-manager')) {
+            console.log('[Global dragenter]', t.className);
+        }
+    };
+    document.addEventListener('dragover', globalDragOverLogger);
+    document.addEventListener('dragenter', globalDragEnterLogger);
 });
 
 onUnmounted(() => {
@@ -225,6 +449,9 @@ onUnmounted(() => {
     // Ideally yes, but changing pages shouldn't necessarily stop watching if we want background updates. 
     // But for performance, let's stop it.
     invoke('unwatch_mods').catch(e => console.error(e));
+
+    if (globalDragOverLogger) document.removeEventListener('dragover', globalDragOverLogger);
+    if (globalDragEnterLogger) document.removeEventListener('dragenter', globalDragEnterLogger);
 });
 
 watch(selectedGame, (newVal) => {
@@ -622,7 +849,10 @@ const getGroupIcon = (groupId: string) => {
 
     <div class="main-content" @click="closeContextMenu" @contextmenu="closeContextMenu">
         <!-- Sidebar Filter -->
-        <div class="sidebar glass-panel">
+           <div class="sidebar glass-panel" :style="{ width: sidebarWidth + 'px' }"
+               @dragenter.stop.prevent
+               @dragover.stop.prevent
+               @drop.stop.prevent>
             <div class="sidebar-header">
                 <span class="title">分类列表</span>
                 <el-button :icon="Plus" circle size="small" @click.stop="createNewGroup" text bg />
@@ -632,18 +862,24 @@ const getGroupIcon = (groupId: string) => {
                     class="group-item" 
                     :class="{ active: selectedGroup === 'All' }"
                     @click="selectedGroup = 'All'"
+                    data-group-id="All"
                 >
                     <el-icon class="tree-icon-placeholder"><Folder /></el-icon>
                     <span>全部</span>
                     <span class="count">{{ mods.length }}</span>
                 </div>
                 <!-- Special Groups for Folder Structure -->
-                 <div 
-                    class="group-item" 
-                    :class="{ active: selectedGroup === 'Root' }"
-                     @click="selectedGroup = 'Root'"
-                     v-if="mods.some(m => m.group === 'Root')"
-                >
+                      <div 
+                          class="group-item" 
+                          :class="{ active: selectedGroup === 'Root' }"
+                            @click="selectedGroup = 'Root'"
+                            v-if="mods.some(m => m.group === 'Root')"
+                            @dragenter.stop.prevent="onDragEnter"
+                            @dragover.stop.prevent="onDragOver"
+                            @dragleave.stop="onDragLeave"
+                            @drop.stop.prevent="onDrop($event, 'Root')"
+                            data-group-id="Root"
+                     >
                     <el-icon class="tree-icon-placeholder"><Folder /></el-icon>
                     <span>未分类 (Root)</span>
                     <span class="count">{{ mods.filter(m => m.group === 'Root').length }}</span>
@@ -661,9 +897,14 @@ const getGroupIcon = (groupId: string) => {
                     class="group-tree"
                 >
                     <template #default="{ node, data }">
-                        <div class="custom-tree-node"
-                             @contextmenu.prevent.stop="showGroupContextMenu($event, data.id)"
-                        >
+                                <div class="custom-tree-node"
+                                    @contextmenu.prevent.stop="showGroupContextMenu($event, data.id)"
+                                    @dragenter.stop.prevent="onDragEnter"
+                                    @dragover.stop.prevent="onDragOver"
+                                    @dragleave.stop="onDragLeave"
+                                    @drop.stop.prevent="onDrop($event, data.id)"
+                                    :data-group-id="data.id"
+                                >
                             <div class="node-content">
                                 <img v-if="data.icon" :src="convertFileSrc(data.icon)" class="tree-icon" />
                                 <el-icon v-else class="tree-icon-placeholder"><Folder /></el-icon>
@@ -674,6 +915,8 @@ const getGroupIcon = (groupId: string) => {
                     </template>
                 </el-tree>
             </div>
+            <!-- Resizer Handle -->
+            <div class="sidebar-resizer" @mousedown="startResize"></div>
         </div>
 
         <!-- Mod Grid -->
@@ -691,6 +934,8 @@ const getGroupIcon = (groupId: string) => {
                     class="mod-card glass-panel"
                     :class="{ 'is-disabled': !mod.enabled }"
                     @contextmenu.prevent.stop="showModContextMenu($event, mod)"
+                    draggable="false"  
+                    @mousedown="onCardMouseDown($event, mod)"
                 >
                     <!-- Preview Image -->
                     <div class="card-preview">
@@ -854,6 +1099,7 @@ const getGroupIcon = (groupId: string) => {
     flex-direction: column;
     padding: 0;
     overflow: hidden;
+    -webkit-app-region: no-drag; /* Ensure content is not treated as window drag area */
 }
 
 /* Glass Panel Utility */
@@ -897,15 +1143,40 @@ const getGroupIcon = (groupId: string) => {
 
 /* Sidebar */
 .sidebar {
-    width: 220px;
+    /* width: 220px; Removed fixed width, handled by inline style */
     flex-shrink: 0;
     overflow-y: auto;
     border-right: 1px solid rgba(255, 255, 255, 0.05);
     background: rgba(20, 20, 25, 0.4); /* Slightly dark */
+    position: relative; /* For resizer positioning */
+}
+
+.sidebar-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 4px; /* Interaction area */
+    height: 100%;
+    cursor: col-resize;
+    background: transparent;
+    z-index: 10;
+    transition: background 0.2s;
+}
+
+.sidebar-resizer:hover {
+    background: rgba(64, 158, 255, 0.5);
 }
 
 .group-list {
     padding: 12px;
+}
+
+/* Drag Styling */
+.group-item.drag-over,
+.custom-tree-node.drag-over {
+    background: rgba(64, 158, 255, 0.3) !important;
+    border-radius: 4px;
+    outline: 1px dashed #409eff;
 }
 
 .group-item {
@@ -997,6 +1268,13 @@ const getGroupIcon = (groupId: string) => {
     background: rgba(30, 30, 35, 0.4);
     border: 1px solid rgba(255, 255, 255, 0.05);
     position: relative;
+    user-select: none; /* Prevent text selection during drag */
+    cursor: grab; /* Indicate draggable */
+    z-index: 1;
+}
+
+.mod-card:active {
+    cursor: grabbing;
 }
 
 .mod-card:hover {
@@ -1032,6 +1310,12 @@ const getGroupIcon = (groupId: string) => {
 }
 .mod-card:hover .image-wrapper {
     transform: scale(1.05);
+}
+
+/* Prevent image dragging interfering with card dragging */
+:deep(.mod-card img) {
+    -webkit-user-drag: none;
+    pointer-events: none;
 }
 
 .image-placeholder {
@@ -1071,7 +1355,14 @@ const getGroupIcon = (groupId: string) => {
     justify-content: center;
     opacity: 0;
     transition: opacity 0.2s;
+    pointer-events: none; /* Let clicks pass through to draggable card */
 }
+
+/* Allow interaction with buttons inside overlay */
+.card-overlay .el-button {
+    pointer-events: auto;
+}
+
 .mod-card:hover .card-overlay {
     opacity: 1;
 }

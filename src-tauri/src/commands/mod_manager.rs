@@ -138,8 +138,18 @@ fn scan_folder(
                     // But wait, if we have a category with just an icon and no mods yet? It should catch as category.
                 
 
-                // Check for ini files
-                let has_ini = fs::read_dir(&path).ok().map(|mut r| r.any(|e| e.ok().map(|i| i.path().extension().map(|x| x == "ini").unwrap_or(false)).unwrap_or(false))).unwrap_or(false);
+                // Check for ini files (case-insensitive)
+                let has_ini = fs::read_dir(&path)
+                    .ok()
+                    .map(|r| {
+                        r.flatten().any(|i| {
+                            i.path()
+                                .extension()
+                                .map(|ext| ext.to_string_lossy().eq_ignore_ascii_case("ini"))
+                                .unwrap_or(false)
+                        })
+                    })
+                    .unwrap_or(false);
                 
                 // Check for subdirectories (ignoring common non-mod folders if necessary, but keep simple for now)
                 let has_subdirs = fs::read_dir(&path).ok().map(|mut r| r.any(|e| e.ok().map(|i| i.path().is_dir()).unwrap_or(false))).unwrap_or(false);
