@@ -14,6 +14,8 @@
 
 [在线文档](https://starbobis.github.io/SSMT4-Documents/) | [最新下载](https://github.com/StarBobis/SSMT4/releases) | [问题反馈](https://github.com/StarBobis/SSMT4/issues)
 
+SSMT测试与BUG反馈QQ群:1007813216
+
 </div>
 
 ![alt text](image.png)

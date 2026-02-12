@@ -1190,7 +1190,7 @@ const onGroupMouseMove = (e: MouseEvent) => {
     }
 };
 
-const onGroupMouseUp = (e: MouseEvent) => {
+const onGroupMouseUp = () => {
     document.removeEventListener('mousemove', onGroupMouseMove);
     document.removeEventListener('mouseup', onGroupMouseUp);
 
