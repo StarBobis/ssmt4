@@ -43,6 +43,7 @@ pub fn run() {
         // 从各个子模块中注册命令
         .invoke_handler(tauri::generate_handler![
             commands::common::greet,
+            commands::common::get_resource_path,
             commands::common::ensure_directory,
             commands::common::open_in_explorer,
             commands::settings::save_settings,

@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::path::PathBuf;
 use std::process::Command;
 use tauri::AppHandle;
-use sysinfo::{System, ProcessRefreshKind, UpdateKind, RefreshKind};
+use sysinfo::{System, ProcessRefreshKind, UpdateKind};
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

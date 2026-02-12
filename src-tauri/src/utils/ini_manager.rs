@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::io::{self, Write};
+use std::io::{Write};
 
 pub struct IniManager {
     path: PathBuf,

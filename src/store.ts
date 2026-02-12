@@ -75,6 +75,23 @@ async function loadSettings() {
   }
 }
 
+
+// Default background path
+let defaultBgPath = '';
+
+async function initDefaultBackground() {
+    try {
+        const path = await invoke<string>('get_resource_path', { filename: 'Background.png' });
+        defaultBgPath = convertFileSrc(path);
+        // If current bgImage is empty, apply it immediately
+        if (!appSettings.bgImage && appSettings.bgType === BGType.Image) {
+            appSettings.bgImage = defaultBgPath;
+        }
+    } catch (e) {
+        console.warn('Failed to get default background:', e);
+    }
+}
+
 export async function loadGames() {
   try {
     const games = await invoke<GameInfo[]>('scan_games');
@@ -96,6 +113,9 @@ export async function loadGames() {
     });
 
     gamesList.splice(0, gamesList.length, ...processed);
+    
+    // Ensure default background is loaded
+    await initDefaultBackground();
 
     // Refresh current game background if it exists
     if (appSettings.currentConfigName) {
@@ -103,6 +123,11 @@ export async function loadGames() {
       if (current) {
         switchToGame(current);
       }
+    } else {
+        // If no game selected, ensure default background is shown
+         if (!appSettings.bgImage && appSettings.bgType === BGType.Image) {
+            appSettings.bgImage = defaultBgPath;
+        }
     }
   } catch (e) {
     console.error('Failed to scan games:', e);
@@ -120,7 +145,7 @@ export function switchToGame(game: GameInfo) {
     appSettings.bgVideo = game.bgVideoPath;
   } else {
     appSettings.bgType = BGType.Image;
-    appSettings.bgImage = game.bgPath || '';
+    appSettings.bgImage = game.bgPath || defaultBgPath;
   }
 }
 
