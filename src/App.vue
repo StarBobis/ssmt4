@@ -50,8 +50,8 @@ onUnmounted(() => {
     </transition-group>
   </div>
   
-  <!-- Home Ambient Shadow Layer -->
-  <div class="home-shadow-layer" v-if="route.path === '/'"></div>
+  <!-- Home & Websites Ambient Shadow Layer -->
+  <div class="home-shadow-layer" v-if="route.path === '/' || route.path === '/websites'"></div>
 
   <!-- Global Mask Layer for Game Library Page -->
   <transition name="fade">
@@ -152,16 +152,17 @@ input, textarea {
   height: 100%;
   z-index: 0; /* On top of bg-layer (also 0, but later in DOM), behind app-container (1) */
   pointer-events: none;
+  /* 
+     Fix: Removed 'multiply' blend mode which made things look dirty.
+     New Style: Clean cinematic vignette + bottom fade for UI readability.
+     Keeps the center bright and clean.
+  */
   background: 
-    /* 1. Bottom-Left Shadow: subtle grounding */
-    radial-gradient(circle at 0% 100%, rgba(0, 0, 0, 0.4) 0%, transparent 50%),
+    /* 1. Seamless smooth fade from bottom (for potential footer text) */
+    linear-gradient(to top, rgba(0, 0, 0, 0.6) 0%, transparent 35%),
     
-    /* 2. Bottom-Right Shadow: subtle grounding */
-    radial-gradient(circle at 100% 100%, rgba(0, 0, 0, 0.4) 0%, transparent 50%),
-    
-    /* 3. Top-Right to Center-ish Shadow: dramatic diagonal shading */
-    linear-gradient(225deg, rgba(0, 0, 0, 0.3) 0%, transparent 60%);
-  mix-blend-mode: multiply;
+    /* 2. Very subtle cinematic vignette (corners only, center is pure clean) */
+    radial-gradient(circle at 50% 50%, transparent 65%, rgba(0, 0, 0, 0.5) 120%);
 }
 
 .global-dim-layer {

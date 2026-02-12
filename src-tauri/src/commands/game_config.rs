@@ -263,20 +263,29 @@ pub async fn update_game_background(
     let first_bg = backgrounds.get(0).ok_or("Empty backgrounds list")?;
 
     let target_url = if bg_type == BGType::Video {
-        first_bg
+        let v_url = first_bg
             .get("video")
             .and_then(|v| v.get("url"))
-            .and_then(|v| v.as_str())
-            .ok_or("No video URL found")?
+            .and_then(|v| v.as_str());
+        
+        // If video is requested but empty/missing, try fallback or error
+        match v_url {
+            Some(u) if !u.is_empty() => u,
+            _ => return Err("Current game preset has no background video available.".to_string()),
+        }
     } else {
-        first_bg
+        let i_url = first_bg
             .get("background")
             .and_then(|v| v.get("url"))
-            .and_then(|v| v.as_str())
-            .ok_or("No image URL found")?
+            .and_then(|v| v.as_str());
+
+         match i_url {
+            Some(u) if !u.is_empty() => u,
+            _ => return Err("Current game preset has no background image available.".to_string()),
+        }
     };
 
-    println!("Downloading background from: {}", target_url);
+    println!("Downloading background from: '[{}]'", target_url);
 
     // Download
     let download_resp = reqwest::get(target_url)

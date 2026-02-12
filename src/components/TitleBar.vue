@@ -12,17 +12,20 @@ const checkMaximized = async () => {
     isMaximized.value = await appWindow.isMaximized();
 };
 
+let unlistenResize: (() => void) | null = null;
+
 onMounted(async () => {
     checkMaximized();
     // Listen to resize event to update maximized state icon
-    const unlisten = await appWindow.onResized(() => {
+    unlistenResize = await appWindow.onResized(() => {
         checkMaximized();
     });
-    
-    // Setup cleanup
-    onUnmounted(() => {
-        unlisten();
-    });
+});
+
+onUnmounted(() => {
+    if (unlistenResize) {
+        unlistenResize();
+    }
 });
 
 const minimize = () => appWindow.minimize();

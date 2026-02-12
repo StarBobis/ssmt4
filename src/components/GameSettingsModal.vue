@@ -344,6 +344,17 @@ const pickDll = async () => {
     } catch (e) { console.error(e); }
 };
 
+const setDefaultDll = async () => {
+    if (config.threeDMigoto.installDir) {
+        try {
+            const dllPath = await join(config.threeDMigoto.installDir, 'd3d11.dll');
+            config.threeDMigoto.extraDll = dllPath;
+        } catch (e) {
+            console.error('Failed to join path:', e);
+        }
+    }
+};
+
 const createNewConfig = async () => {
   if (!configName.value) return;
   
@@ -524,7 +535,7 @@ const close = () => {
                 <div class="button-row">
                   <button class="action-btn" @click="pick3dmigotoDir">选择文件夹</button>
                   <button class="action-btn" @click="open3dmigotoDir">打开文件夹</button>
-                  <button v-if="canUpdatePackage" class="action-btn" @click="check3DMigotoPackageUpdate">更新整合包</button>
+                  <button v-if="canUpdatePackage" class="action-btn highlight" @click="check3DMigotoPackageUpdate">更新整合包</button>
                 </div>
               </div>
 
@@ -595,6 +606,7 @@ const close = () => {
                  <input v-model="config.threeDMigoto.extraDll" type="text" class="custom-input" placeholder="选择或者留空" />
                  <div class="button-row">
                   <button class="action-btn" @click="pickDll">选择文件</button>
+                  <button class="action-btn highlight" @click="setDefaultDll">设为当前d3d11.dll</button>
                  </div>
               </div>
 
@@ -805,6 +817,15 @@ const close = () => {
 }
 .action-btn.create:hover {
   background: rgba(247, 206, 70, 0.3);
+}
+
+.action-btn.highlight {
+  background: rgba(0, 122, 204, 0.3);
+  border: 1px solid rgba(0, 122, 204, 0.5);
+  color: #61afef;
+}
+.action-btn.highlight:hover {
+  background: rgba(0, 122, 204, 0.5);
 }
 
 .action-btn.delete {
