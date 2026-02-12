@@ -1,13 +1,14 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use crate::commands::game_scanner::BGType;
 use crate::utils::file_manager;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")] // Match JS conventions
 #[serde(default)]
 pub struct AppConfig {
-    pub bg_type: String,
+    pub bg_type: BGType,
     pub bg_image: String,
     pub bg_video: String,
     pub sidebar_opacity: f64,
@@ -25,7 +26,7 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            bg_type: "image".to_string(),
+            bg_type: BGType::Image,
             bg_image: "".to_string(), 
             bg_video: "".to_string(),
             sidebar_opacity: 0.3,

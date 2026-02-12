@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from "vue";
+import { onMounted, onUnmounted } from "vue";
+// import computed from "vue";
 import { useRoute } from "vue-router";
-import { appSettings } from "./store";
+import { appSettings, BGType } from "./store";
 import TitleBar from "./components/TitleBar.vue";
 
 const route = useRoute();
@@ -32,7 +33,7 @@ onUnmounted(() => {
     <transition-group name="bg-trans">
       <!-- Image Background -->
       <div 
-        v-if="appSettings.bgType === 'image' && appSettings.bgImage"
+        v-if="appSettings.bgType === BGType.Image && appSettings.bgImage"
         :key="appSettings.bgImage"
         class="bg-item"
         :style="{ backgroundImage: `url(${appSettings.bgImage})` }"
@@ -40,7 +41,7 @@ onUnmounted(() => {
 
       <!-- Video Background -->
       <video 
-        v-if="appSettings.bgType === 'video' && appSettings.bgVideo" 
+        v-if="appSettings.bgType === BGType.Video && appSettings.bgVideo" 
         :key="appSettings.bgVideo"
         :src="appSettings.bgVideo" 
         autoplay loop muted playsinline 

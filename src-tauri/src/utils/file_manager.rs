@@ -1,29 +1,38 @@
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 use tauri::{AppHandle, Manager};
 
 pub fn get_global_games_dir(app: &AppHandle) -> PathBuf {
     // 1. 获取 LocalAppData 路径: C:\Users\xxx\AppData\Local
-    let local_data = app.path().local_data_dir().unwrap_or(PathBuf::from("."));
-    
+    // let local_data = app.path().local_data_dir().unwrap_or(PathBuf::from("."));
+    // 这里没必要中间变量
     // 2. 构造目标路径: ...\AppData\Local\SSMT4GlobalConfigs\Games
-    let global_config_dir = local_data.join("SSMT4GlobalConfigs");
+    let global_config_dir = app
+        .path()
+        .local_data_dir()
+        .unwrap_or(PathBuf::from("."))
+        .join("SSMT4GlobalConfigs");
     let target_games_dir = global_config_dir.join("Games");
-    
+
     // 3. 如果目录不存在，执行初始化拷贝逻辑
     if !target_games_dir.exists() {
         // 先尝试创建父目录
         if !global_config_dir.exists() {
             let _ = fs::create_dir_all(&global_config_dir);
         }
-        
+
         // 查找源头（我们打包自带的 resources/Games）
         if let Some(source_games) = find_source_games_dir(app) {
-             println!("Initializing Global Games Dir from: {:?} to {:?}", source_games, target_games_dir);
-             let _ = copy_dir_recursive(&source_games, &target_games_dir);
+            println!(
+                "Initializing Global Games Dir from: {:?} to {:?}",
+                source_games, target_games_dir
+            );
+            let _ = copy_dir_recursive(&source_games, &target_games_dir);
         } else {
-             // 没找到源，依然尝试创建空目录，防止报错
-             let _ = fs::create_dir_all(&target_games_dir);
+            // 没找到源，依然尝试创建空目录，防止报错
+            let _ = fs::create_dir_all(&target_games_dir);
         }
     }
 
@@ -34,24 +43,30 @@ pub fn get_global_games_dir(app: &AppHandle) -> PathBuf {
 fn find_source_games_dir(app: &AppHandle) -> Option<PathBuf> {
     if let Ok(resource_dir) = app.path().resource_dir() {
         let p = resource_dir.join("Games");
-        if p.exists() { return Some(p); }
+        if p.exists() {
+            return Some(p);
+        }
     }
-    
+
     if let Ok(mut exec_dir) = std::env::current_exe() {
-        exec_dir.pop(); 
-        
+        exec_dir.pop();
+
         let p1 = exec_dir.join("resources").join("Games");
-        if p1.exists() { return Some(p1); }
+        if p1.exists() {
+            return Some(p1);
+        }
 
         let p2 = exec_dir.join("Games");
-        if p2.exists() { return Some(p2); }
+        if p2.exists() {
+            return Some(p2);
+        }
     }
-    
+
     // Dev environment fallback
     if Path::new("Games").exists() {
         return Some(PathBuf::from("Games"));
     }
-    
+
     None
 }
 
@@ -93,7 +108,7 @@ pub fn get_app_config_dir() -> Option<PathBuf> {
         path.push("SSMT4Configs");
         return Some(path);
     }
-    
+
     // Simple fallback for Linux/Mac if needed, though user is on Windows
     if let Ok(home) = std::env::var("HOME") {
         let mut path = PathBuf::from(home);
