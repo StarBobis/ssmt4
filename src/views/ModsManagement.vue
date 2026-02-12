@@ -1498,6 +1498,7 @@ const getGroupIcon = (groupId: string) => {
                     @contextmenu.prevent.stop="showModContextMenu($event, mod)"
                     :draggable="false"
                     @mousedown="onCardMouseDownWrapper($event, mod)"
+                    @dblclick.stop="openModFolder(mod.path)"
                     :data-mod-id="mod.id"
                 >
                     <!-- Preview Image -->
@@ -1516,11 +1517,6 @@ const getGroupIcon = (groupId: string) => {
                         </div>
                         <div v-else class="image-placeholder">
                             <span class="char-avatar">{{ mod.group === 'Root' ? mod.name.charAt(0) : mod.group.charAt(0) }}</span>
-                        </div>
-
-                        <!-- Hover Actions -->
-                        <div class="card-overlay">
-                            <el-button size="small" circle @click.stop="openModFolder(mod.path)" :icon="Folder" title="打开文件夹" />
                         </div>
                     </div>
 
@@ -1626,6 +1622,10 @@ const getGroupIcon = (groupId: string) => {
         <div v-if="contextMenu.type === 'mod'" class="menu-content">
             <div class="menu-header">{{ contextMenu.target?.name }}</div>
             <div class="menu-divider"></div>
+            <div class="menu-item" @click="closeContextMenu(); openModFolder(contextMenu.target.path)">
+                <el-icon><Folder /></el-icon>
+                <span>打开文件夹</span>
+            </div>
             <div class="menu-item has-submenu">
                 <el-icon><FolderAdd /></el-icon>
                 <span>移动到...</span>
