@@ -114,7 +114,7 @@ const loadConfig = async () => {
       showErrorPopup: threeDMigotoData.showErrorPopup !== undefined ? threeDMigotoData.showErrorPopup : true,
       autoSetAnalyseOptions: threeDMigotoData.autoSetAnalyseOptions !== undefined ? threeDMigotoData.autoSetAnalyseOptions : true,
       useShell: threeDMigotoData.useShell || false,
-      useUpx: threeDMigotoData.useUpx || false,
+      useUpx: threeDMigotoData.useUpx || true,
       delay: threeDMigotoData.delay !== undefined ? threeDMigotoData.delay : 100,
       autoExitSeconds: threeDMigotoData.autoExitSeconds !== undefined ? threeDMigotoData.autoExitSeconds : 5,
       extraDll: threeDMigotoData.extraDll || ''
