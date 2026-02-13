@@ -157,7 +157,7 @@ const onNavMouseMove = (e: MouseEvent) => {
     }
 };
 
-const onNavMouseUp = (e: MouseEvent) => {
+const onNavMouseUp = (_e: MouseEvent) => {
     document.removeEventListener('mousemove', onNavMouseMove);
     document.removeEventListener('mouseup', onNavMouseUp);
 
