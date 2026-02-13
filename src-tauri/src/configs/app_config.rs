@@ -46,7 +46,7 @@ impl Default for AppConfig {
             window_height: 720.0,
             github_token: "".to_string(),            
             show_mods: true,            
-            show_websites: false,
+            show_websites: true,
             show_documents: true,
         }
     }
