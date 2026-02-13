@@ -123,11 +123,11 @@ onUnmounted(() => {
   </div>
   
   <!-- Home & Websites & Settings Ambient Shadow Layer -->
-  <div class="home-shadow-layer" v-if="route.path === '/' || route.path === '/websites'"></div>
+  <div class="home-shadow-layer" v-if="route.path === '/'"></div>
 
   <!-- Global Mask Layer for Game Library Page -->
   <transition name="fade">
-    <div v-if="route.path === '/games' || route.path === '/settings' || route.path === '/mods'" class="global-dim-layer"></div>
+    <div v-if="route.path === '/games' || route.path === '/settings' || route.path === '/mods' || route.path === '/websites'" class="global-dim-layer"></div>
   </transition>
 
   <el-config-provider>
