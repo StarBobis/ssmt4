@@ -5,7 +5,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { gamesList, appSettings } from '../store';
 import { open } from '@tauri-apps/plugin-dialog';
-import { Folder, Refresh, Picture, Search, Plus, Edit, Delete, FolderAdd, ArrowRight, View, Hide, CircleClose } from '@element-plus/icons-vue';
+import { Folder, Refresh, Picture, Search, Plus, Edit, Delete, FolderAdd, ArrowRight, ArrowLeft, View, Hide, CircleClose } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 interface ModInfo {
@@ -153,30 +153,42 @@ const toggleGroup = async (group: GroupInfo) => {
     }
 };
 
-const renameGroup = async (oldName: string) => {
+const renameGroup = async (oldPath: string) => {
+    // Extract purely the name part for editing, keeping the parent path fixed.
+    // Assuming paths use '/' as separator based on other parts of the code.
+    const parts = oldPath.split('/');
+    const currentName = parts[parts.length - 1];
+    const parent = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+
     try {
         const result = await ElMessageBox.prompt('请输入新的分类名称', '重命名分类', {
             confirmButtonText: '确定',
             cancelButtonText: '取消',
-            inputValue: oldName
+            inputValue: currentName,
+            inputPattern: /^[^\\/:*?"<>|]+$/,
+            inputErrorMessage: '名称不能包含非法字符'
         }) as any;
         
-        const value = result.value;
+        const newName = result.value;
         
-        if (value && value !== oldName) {
-             await invoke('rename_mod_group', { 
+        if (newName && newName !== currentName) {
+            const newPath = parent ? `${parent}/${newName}` : newName;
+
+            await invoke('rename_mod_group', { 
                 gameName: selectedGame.value, 
-                oldGroup: oldName,
-                newGroup: value 
+                oldGroup: oldPath,
+                newGroup: newPath 
             });
             ElMessage.success('分类重命名成功');
-            if (selectedGroup.value === oldName) {
-                selectedGroup.value = value;
+            if (selectedGroup.value === oldPath) {
+                selectedGroup.value = newPath;
             }
             fetchMods();
         }
-    } catch {
-        // User cancelled
+    } catch (e: any) {
+        if (e !== 'cancel' && e?.action !== 'cancel') {
+            ElMessage.error(`重命名失败: ${e}`);
+        }
     }
 };
 
@@ -822,6 +834,18 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Initialize selected game from store if possible
 onMounted(async () => {
+    // Auto switch preview images
+    autoSwitchInterval = setInterval(() => {
+        mods.value.forEach(mod => {
+            if (mod.previewImages && mod.previewImages.length > 1) {
+                // Only switch if user hasn't interacted recently? 
+                // Requirement: "automatically switch the preview image to the next one"
+                // Simple implementation first.
+                nextPreview(mod);
+            }
+        });
+    }, 5000); // Switch every 5 seconds
+
     // ... existing init code ...
     console.log('[GroupExpanded] onMounted start');
     if (appSettings.currentConfigName && gamesList.find(g => g.name === appSettings.currentConfigName)) {
@@ -873,6 +897,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    if (autoSwitchInterval) clearInterval(autoSwitchInterval);
     if (unlistenFileChange) unlistenFileChange();
     if (unlistenDrop) unlistenDrop();
     // Stop watching backend? 
@@ -1358,12 +1383,36 @@ const filteredMods = computed(() => {
     });
 });
 
+const modPreviewIndices = reactive<Record<string, number>>({});
+
+const getPreviewIndex = (mod: ModInfo) => modPreviewIndices[mod.id] || 0;
+
 const getPreviewUrl = (mod: ModInfo) => {
     if (mod.previewImages && mod.previewImages.length > 0) {
-        return convertFileSrc(mod.previewImages[0]);
+        const index = getPreviewIndex(mod);
+        const safeIndex = index < mod.previewImages.length ? index : 0;
+        return convertFileSrc(mod.previewImages[safeIndex]);
     }
     return ''; // Placeholder handled by UI
 };
+
+const nextPreview = (mod: ModInfo) => {
+    if (!mod.previewImages?.length) return;
+    const current = getPreviewIndex(mod);
+    modPreviewIndices[mod.id] = (current + 1) % mod.previewImages.length;
+};
+
+const prevPreview = (mod: ModInfo) => {
+    if (!mod.previewImages?.length) return;
+    const current = getPreviewIndex(mod);
+    modPreviewIndices[mod.id] = (current - 1 + mod.previewImages.length) % mod.previewImages.length;
+};
+
+const setPreviewIndex = (mod: ModInfo, index: number) => {
+    modPreviewIndices[mod.id] = index;
+};
+
+let autoSwitchInterval: any = null;
 
 const getGroupIcon = (groupId: string) => {
     if(!groupId || groupId === 'Root') return null;
@@ -1502,21 +1551,52 @@ const getGroupIcon = (groupId: string) => {
                     :data-mod-id="mod.id"
                 >
                     <!-- Preview Image -->
-                    <div class="card-preview">
+                    <div class="card-preview" :class="{ 'has-multiple-images': mod.previewImages && mod.previewImages.length > 1 }">
+                         <div 
+                            class="preview-nav prev" 
+                            v-if="mod.previewImages && mod.previewImages.length > 1"
+                            @click.stop="prevPreview(mod)"
+                        >
+                            <el-icon><ArrowLeft /></el-icon>
+                        </div>
+
                         <div v-if="getPreviewUrl(mod)" class="image-wrapper">
-                             <el-image 
-                                :src="getPreviewUrl(mod)" 
-                                fit="cover" 
-                                loading="lazy"
-                                style="width: 100%; height: 100%;"
-                             >
-                                <template #error>
-                                    <div class="image-placeholder"><el-icon><Picture /></el-icon></div>
-                                </template>
-                             </el-image>
+                             <transition name="preview-slide">
+                                <div :key="getPreviewUrl(mod)" class="slide-item">
+                                    <el-image 
+                                        :src="getPreviewUrl(mod)" 
+                                        fit="cover" 
+                                        loading="lazy"
+                                        class="zoom-image"
+                                    >
+                                        <template #error>
+                                            <div class="image-placeholder"><el-icon><Picture /></el-icon></div>
+                                        </template>
+                                    </el-image>
+                                </div>
+                             </transition>
                         </div>
                         <div v-else class="image-placeholder">
                             <span class="char-avatar">{{ mod.group === 'Root' ? mod.name.charAt(0) : mod.group.charAt(0) }}</span>
+                        </div>
+
+                        <div 
+                            class="preview-nav next" 
+                            v-if="mod.previewImages && mod.previewImages.length > 1"
+                            @click.stop="nextPreview(mod)"
+                        >
+                            <el-icon><ArrowRight /></el-icon>
+                        </div>
+
+                        <!-- Indicators -->
+                        <div class="preview-indicators" v-if="mod.previewImages && mod.previewImages.length > 1">
+                            <span 
+                                v-for="(_, index) in mod.previewImages" 
+                                :key="index"
+                                class="indicator-dot"
+                                :class="{ active: index === getPreviewIndex(mod) }"
+                                @click.stop="setPreviewIndex(mod, index)"
+                            ></span>
                         </div>
                     </div>
 
@@ -1936,12 +2016,113 @@ const getGroupIcon = (groupId: string) => {
     overflow: hidden;
 }
 
+.preview-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    background: rgba(0,0,0,0.3); 
+    color: rgba(255,255,255,0.7);
+    opacity: 0; 
+    transition: opacity 0.3s, background 0.3s;
+    border-radius: 4px;
+    margin: 0 4px;
+}
+
+.mod-card:hover .preview-nav {
+    opacity: 1; 
+}
+
+.preview-nav.prev { left: 0; }
+.preview-nav.next { right: 0; }
+
+.preview-nav:hover { 
+    background: rgba(0,0,0,0.6); 
+    color: #fff;
+    backdrop-filter: blur(2px);
+}
+
+.preview-indicators {
+    position: absolute;
+    bottom: 8px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    z-index: 15;
+    pointer-events: none;
+}
+
+.indicator-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.4);
+    transition: background 0.3s, transform 0.3s;
+    pointer-events: auto;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.indicator-dot:hover {
+    background: rgba(255, 255, 255, 0.7);
+    transform: scale(1.1);
+}
+
+.indicator-dot.active {
+    background: #fff;
+    transform: scale(1.2);
+    box-shadow: 0 0 4px rgba(255,255,255,0.4);
+}
+
+.slide-item {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* Slide Transition for Preview Images */
+.preview-slide-enter-active,
+.preview-slide-leave-active {
+  transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease;
+}
+
+.preview-slide-enter-from {
+  transform: translateX(100%);
+  opacity: 0.8;
+}
+
+.preview-slide-leave-to {
+  transform: translateX(-100%);
+  opacity: 0.8;
+}
+
+/* Ensure container can handle absolute children properly */
 .image-wrapper {
     width: 100%;
     height: 100%;
+    position: relative;
+    overflow: hidden; /* Clip sliding images */
+}
+
+/* Zoom effect on the internal image */
+.zoom-image {
+    width: 100%;
+    height: 100%;
+    display: block;
     transition: transform 0.5s ease;
 }
-.mod-card:hover .image-wrapper {
+
+.mod-card:hover .zoom-image {
     transform: scale(1.05);
 }
 

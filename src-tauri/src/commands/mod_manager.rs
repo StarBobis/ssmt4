@@ -508,7 +508,7 @@ pub fn create_mod_group(app: AppHandle, game_name: String, group_name: String) -
 }
 
 #[tauri::command]
-pub fn rename_mod_group(app: AppHandle, game_name: String, old_group: String, new_group: String) -> Result<(), String> {
+pub async fn rename_mod_group(app: AppHandle, state: State<'_, ModWatcher>, game_name: String, old_group: String, new_group: String) -> Result<(), String> {
     let install_dir = get_game_install_dir(&app, &game_name)?;
     let mods_dir = install_dir.join("Mods");
     let old_dir = mods_dir.join(&old_group);
@@ -521,7 +521,40 @@ pub fn rename_mod_group(app: AppHandle, game_name: String, old_group: String, ne
         return Err("New group name already taken".to_string());
     }
     
-    fs::rename(&old_dir, &new_dir).map_err(|e| format!("Failed to rename group: {}", e))?;
+    // Stop watcher temporarily
+    {
+        if let Ok(mut watcher_guard) = state.0.lock() {
+            *watcher_guard = None;
+        }
+    }
+    
+    // Give OS time to release handles
+    std::thread::sleep(std::time::Duration::from_millis(150));
+
+    // Retry loop for robustness
+    let mut success = false;
+    let mut last_error = String::new();
+
+    for _ in 0..5 {
+        match fs::rename(&old_dir, &new_dir) {
+            Ok(_) => {
+                success = true;
+                break;
+            }
+            Err(e) => {
+                last_error = e.to_string();
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+        }
+    }
+
+    // Try to restart watcher regardless of outcome
+    let _ = watch_mods(app.clone(), state.clone(), game_name.clone()).await;
+
+    if !success {
+        return Err(format!("Failed to rename group (Occupied): {}. Please close Explorer/Files.", last_error));
+    }
+    
     Ok(())
 }
 
