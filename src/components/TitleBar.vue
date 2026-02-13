@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, computed } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useRouter, useRoute } from 'vue-router';
 import { appSettings } from '../store';
@@ -15,8 +15,162 @@ const checkMaximized = async () => {
 
 let unlistenResize: (() => void) | null = null;
 
+// --- Nav Button Logic ---
+const STORAGE_KEY_NAV_ORDER = 'ssmt4_nav_order';
+
+// interface NavButton {
+//     id: string;
+//     path: string;
+//     label: string;
+//     // We will render icon using conditional template or dynamic component if we extracted them
+//     // For now, simpler to just use ID to switch in template or store SVG path
+//     iconPath?: string; 
+//     iconPolys?: string; // For complex SVGs
+//     // Or just simple raw logic
+// }
+
+// We rely on stable IDs
+const allNavItems = ref<any[]>([
+    { id: 'home', path: '/', label: '主页', iconType: 'home' },
+    { id: 'mods', path: '/mods', label: 'Mod管理', iconType: 'mods' },
+    { id: 'websites', path: '/websites', label: '常用网址', iconType: 'websites' },
+    { id: 'documents', path: '/documents', label: '使用文档', iconType: 'documents' },
+]);
+
+// Current order of IDs
+const navOrder = ref<string[]>([]);
+
+// Initialize Order
+const loadOrder = () => {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY_NAV_ORDER);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+                navOrder.value = parsed;
+                return;
+            }
+        }
+    } catch (e) { console.warn('Failed to load nav order', e); }
+    
+    // Default order
+    navOrder.value = allNavItems.value.map(i => i.id);
+};
+
+const saveOrder = () => {
+    localStorage.setItem(STORAGE_KEY_NAV_ORDER, JSON.stringify(navOrder.value));
+};
+
+// Computed display list
+const displayItems = computed(() => {
+    // strict order based on navOrder
+    const map = new Map(allNavItems.value.map(i => [i.id, i]));
+    const result: any[] = [];
+    
+    // Add items in order
+    navOrder.value.forEach(id => {
+        const item = map.get(id);
+        if (item) {
+             // Check visibility
+             if (id === 'mods' && !appSettings.showMods) return;
+             if (id === 'websites' && !appSettings.showWebsites) return;
+             if (id === 'documents' && !appSettings.showDocuments) return;
+             result.push(item);
+        }
+    });
+
+    // Append any new items not in order (robustness)
+    allNavItems.value.forEach(i => {
+        if (!navOrder.value.includes(i.id)) {
+             // Check visibility
+             if (i.id === 'mods' && !appSettings.showMods) return;
+             if (i.id === 'websites' && !appSettings.showWebsites) return;
+             if (i.id === 'documents' && !appSettings.showDocuments) return;
+             result.push(i);
+        }
+    });
+    
+    return result;
+});
+
+// Manual drag state to bypass Tauri drag restrictions
+const navHoverId = ref<string | null>(null);
+const navDraggingId = ref<string | null>(null);
+const navManualState = reactive({
+    active: false,
+    startX: 0,
+    startY: 0,
+    hasMoved: false,
+    itemId: null as string | null,
+});
+
+const resetNavDrag = () => {
+    navManualState.active = false;
+    navManualState.hasMoved = false;
+    navManualState.itemId = null;
+    navHoverId.value = null;
+    navDraggingId.value = null;
+    document.body.style.userSelect = '';
+};
+
+const applyNavReorder = (sourceId: string, targetId: string) => {
+    const oldIndex = navOrder.value.indexOf(sourceId);
+    const newIndex = navOrder.value.indexOf(targetId);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const newOrder = [...navOrder.value];
+    newOrder.splice(oldIndex, 1);
+    newOrder.splice(newIndex, 0, sourceId);
+    navOrder.value = newOrder;
+    saveOrder();
+};
+
+const onNavMouseDown = (e: MouseEvent, item: any) => {
+    if (e.button !== 0) return;
+    navManualState.active = true;
+    navManualState.startX = e.clientX;
+    navManualState.startY = e.clientY;
+    navManualState.hasMoved = false;
+    navManualState.itemId = item.id;
+    navDraggingId.value = item.id;
+    document.addEventListener('mousemove', onNavMouseMove);
+    document.addEventListener('mouseup', onNavMouseUp);
+};
+
+const onNavMouseMove = (e: MouseEvent) => {
+    if (!navManualState.active || !navManualState.itemId) return;
+    const dx = e.clientX - navManualState.startX;
+    const dy = e.clientY - navManualState.startY;
+    if (!navManualState.hasMoved && Math.hypot(dx, dy) > 3) {
+        navManualState.hasMoved = true;
+        document.body.style.userSelect = 'none';
+    }
+
+    if (navManualState.hasMoved) {
+        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+        const btn = el?.closest?.('.nav-button') as HTMLElement | null;
+        const targetId = btn?.dataset.navId || null;
+        if (targetId && targetId !== navManualState.itemId) {
+            navHoverId.value = targetId;
+        } else {
+            navHoverId.value = null;
+        }
+    }
+};
+
+const onNavMouseUp = (e: MouseEvent) => {
+    document.removeEventListener('mousemove', onNavMouseMove);
+    document.removeEventListener('mouseup', onNavMouseUp);
+
+    if (navManualState.active && navManualState.hasMoved && navManualState.itemId && navHoverId.value && navHoverId.value !== navManualState.itemId) {
+        applyNavReorder(navManualState.itemId, navHoverId.value);
+    }
+
+    resetNavDrag();
+};
+
 onMounted(async () => {
     checkMaximized();
+    loadOrder();
     // Listen to resize event to update maximized state icon
     unlistenResize = await appWindow.onResized(() => {
         checkMaximized();
@@ -27,6 +181,9 @@ onUnmounted(() => {
     if (unlistenResize) {
         unlistenResize();
     }
+    document.removeEventListener('mousemove', onNavMouseMove);
+    document.removeEventListener('mouseup', onNavMouseUp);
+    resetNavDrag();
 });
 
 const minimize = () => appWindow.minimize();
@@ -78,25 +235,33 @@ const navTo = (path: string) => {
 };
 </script>
 
+
 <template>
   <div class="titlebar">
     <div class="nav-controls">
-        <div class="nav-button" :class="{ active: route.path === '/' }" @click="navTo('/')" title="主页">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-            <span class="nav-text">主页</span>
-        </div>
-        <div v-if="appSettings.showMods" class="nav-button" :class="{ active: route.path === '/mods' }" @click="navTo('/mods')" title="Mod管理">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-            <span class="nav-text">Mod管理</span>
-        </div>
-        <div v-if="appSettings.showWebsites" class="nav-button" :class="{ active: route.path === '/websites' }" @click="navTo('/websites')" title="常用网址">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-            <span class="nav-text">常用网址</span>
-        </div>
-        <div v-if="appSettings.showDocuments" class="nav-button" :class="{ active: route.path === '/documents' }" @click="navTo('/documents')" title="使用文档">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-            <span class="nav-text">使用文档</span>
-        </div>
+        <transition-group name="nav-list">
+            <div 
+                v-for="item in displayItems" 
+                :key="item.id"
+                class="nav-button" 
+                :class="{ active: route.path === item.path, 'drag-hover': navHoverId === item.id, dragging: navDraggingId === item.id }" 
+                :data-nav-id="item.id"
+                @click="navTo(item.path)" 
+                :title="item.label"
+                @mousedown.prevent="onNavMouseDown($event, item)"
+            >
+                <!-- Icons -->
+                <svg v-if="item.id === 'home'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                
+                <svg v-if="item.id === 'mods'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                
+                <svg v-if="item.id === 'websites'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                
+                <svg v-if="item.id === 'documents'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+
+                <span class="nav-text">{{ item.label }}</span>
+            </div>
+        </transition-group>
     </div>
 
     <div class="drag-region" @mousedown="startDrag">
@@ -242,5 +407,30 @@ const navTo = (path: string) => {
 }
 .control-button.close:hover svg {
     fill: white;
+}
+
+/* Nav List Animation */
+.nav-list-move, 
+.nav-list-enter-active,
+.nav-list-leave-active {
+    transition: all 0.3s ease;
+}
+.nav-list-enter-from,
+.nav-list-leave-to {
+    opacity: 0;
+    transform: translateX(-10px);
+}
+/* ensure leaving items are taken out of flow so others can move smoothly */
+.nav-list-leave-active {
+    position: absolute; 
+}
+
+.nav-button.drag-hover {
+    background: rgba(64, 158, 255, 0.15);
+    outline: 1px dashed #409eff;
+}
+
+.nav-button.dragging {
+    opacity: 0.65;
 }
 </style>
