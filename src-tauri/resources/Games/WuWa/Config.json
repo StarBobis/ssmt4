@@ -1,19 +1,20 @@
 {
-  "TargetPath": "",
-  "3DmigotoPath": "",
-  "LaunchPath": "",
-  "LaunchArgs": "",
-  "WorkSpace": "",
-  "LogicName": "WuWa",
-  "GameTypeName": "WuWa",
-  "AutoSetAnalyseOptions": true,
-  "GithubPackageVersion": "",
-  "DllInitializationDelay": 500,
-  "DllReplaceSelectedIndex": 0,
-  "DllPreProcessSelectedIndex": 0,
-  "LaunchItems": [],
-  "MigotoPackage": "WWMI-Package",
-  "AutoSetAnalyseOptionsSelectedIndex": 0,
-  "PureGameMode": false,
-  "GamePreset": "WuWa"
+  "basic": {
+    "gamePreset": "WWMI",
+    "backgroundType": "Video"
+  },
+  "threeDMigoto": {
+    "autoExitSeconds": 5,
+    "autoSetAnalyseOptions": true,
+    "delay": 500,
+    "extraDll": "",
+    "installDir": "",
+    "launchArgs": "",
+    "launcherExePath": "",
+    "showErrorPopup": true,
+    "targetExePath": "",
+    "useShell": false,
+    "useUpx": true
+  },
+  "other": {}
 }

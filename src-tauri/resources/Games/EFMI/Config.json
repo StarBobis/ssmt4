@@ -1,21 +1,20 @@
 {
-  "TargetPath": "",
-  "3DmigotoPath": "",
-  "LaunchPath": "",
-  "LaunchArgs": "",
-  "WorkSpace": "",
-  "GamePreset": "EFMI",
-  "LogicName": "EFMI",
-  "GameTypeName": "EFMI",
-  "MigotoPackage": "EFMI-Package",
-  "AutoSetAnalyseOptionsSelectedIndex": 0,
-  "GithubPackageVersion": "",
-  "DllInitializationDelay": 1,
-  "DllReplaceSelectedIndex": 0,
-  "DllPreProcessSelectedIndex": 1,
-  "PureGameMode": false,
-  "RunWithShell": false,
-  "AutoRunIgnoreErrorGIPlugin": false,
-  "Delay": 5,
-  "LaunchItems": []
+  "basic": {
+    "gamePreset": "EFMI",
+    "backgroundType": "Video"
+  },
+  "threeDMigoto": {
+    "autoExitSeconds": 5,
+    "autoSetAnalyseOptions": true,
+    "delay": 100,
+    "extraDll": "",
+    "installDir": "",
+    "launchArgs": "",
+    "launcherExePath": "",
+    "showErrorPopup": true,
+    "targetExePath": "",
+    "useShell": false,
+    "useUpx": true
+  },
+  "other": {}
 }

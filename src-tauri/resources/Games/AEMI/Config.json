@@ -1,12 +1,12 @@
 {
   "basic": {
-    "gamePreset": "WWMI",
+    "gamePreset": "AEMI",
     "backgroundType": "Video"
   },
   "threeDMigoto": {
     "autoExitSeconds": 5,
     "autoSetAnalyseOptions": true,
-    "delay": 500,
+    "delay": 100,
     "extraDll": "",
     "installDir": "",
     "launchArgs": "",
