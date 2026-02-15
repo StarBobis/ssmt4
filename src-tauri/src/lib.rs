@@ -39,6 +39,11 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { .. } = event {
+                // 如果窗口被最小化，则不保存大小配置
+                if window.is_minimized().unwrap_or(false) {
+                    return;
+                }
+
                 if let Ok(size) = window.inner_size() {
                     let scale_factor = window.scale_factor().unwrap_or(1.0);
                     let logical_size = size.to_logical::<f64>(scale_factor);

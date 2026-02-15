@@ -27,6 +27,8 @@ export interface AppSettings {
   showWebsites: boolean;
   showDocuments: boolean;
   locale: Locale;  // 我新增
+  windowWidth?: number;
+  windowHeight?: number;
 }
 
 export interface GameInfo {

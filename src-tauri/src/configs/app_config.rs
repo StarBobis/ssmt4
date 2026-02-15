@@ -107,6 +107,14 @@ impl AppConfig {
             }
         }
         
+        // Window size sanity check
+        if config.window_width < 800.0 {
+            config.window_width = 1280.0;
+        }
+        if config.window_height < 600.0 {
+            config.window_height = 720.0;
+        }
+
         Ok(config)
     }
 
